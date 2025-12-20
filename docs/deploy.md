@@ -587,7 +587,7 @@ curl -I https://yourapp.example.com
 
   
 
-# 8. Configure Cloudflare DNS
+# 8. Configure Cloudflare DNS!
 
   
 
