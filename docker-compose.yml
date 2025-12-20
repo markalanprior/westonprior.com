@@ -1,0 +1,9 @@
+services:
+  westonprior:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "4006:3000"
+    restart: always
+
