@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Jumpy Dash Pro</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            touch-action: none;
+        }
+        #game-container {
+            position: relative;
+            width: 1280px;
+            height: 720px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .menu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 2rem;
+            border-radius: 10px;
+            text-align: center;
+            pointer-events: auto;
+            display: none;
+            border: 2px solid #444;
+        }
+        .menu.active {
+            display: block;
+        }
+        button {
+            background: #444;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            margin: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #666;
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 1.5rem;
+            pointer-events: none;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer">
+            <div id="hud">Level: 1</div>
+            <div id="start-menu" class="menu active">
+                <h1>Jumpy Dash Pro</h1>
+                <button onclick="game.start()">Start Game</button>
+                <button onclick="game.showLevelSelect()">Level Select</button>
+            </div>
+            <div id="level-menu" class="menu">
+                <h1>Select Level</h1>
+                <input type="number" id="level-input" min="1" value="1" style="padding: 10px; font-size: 1.2rem; width: 100px; text-align: center; border-radius: 5px; border: none;">
+                <br>
+                <button onclick="game.startLevel()">Play</button>
+                <button onclick="game.showStartMenu()">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- ENGINE: PHYSICS ---
+        class Physics {
+            static checkRectCollision(r1, r2) {
+                return r1.x < r2.x + r2.w &&
+                       r1.x + r1.w > r2.x &&
+                       r1.y < r2.y + r2.h &&
+                       r1.y + r1.h > r2.y;
+            }
+            static resolvePlatformCollision(entity, platform) {
+                if (this.checkRectCollision(entity, platform)) {
+                    if (entity.vy > 0 && entity.y + entity.h - entity.vy <= platform.y + 5) {
+                        entity.y = platform.y - entity.h;
+                        entity.vy = 0;
+                        entity.onGround = true;
+                        return true;
+                    }
+                }
+                return false;
+            }
+        }
+
+        // --- ENGINE: RENDERER ---
+        class Renderer {
+            constructor(canvasId) {
+                this.canvas = document.getElementById(canvasId);
+                this.ctx = this.canvas.getContext('2d');
+                this.width = 1280;
+                this.height = 720;
+                this.canvas.width = this.width;
+                this.canvas.height = this.height;
+            }
+            clear() {
+                this.ctx.fillStyle = '#000';
+                this.ctx.fillRect(0, 0, this.width, this.height);
+            }
+            drawRect(x, y, w, h, color) {
+                this.ctx.fillStyle = color;
+                this.ctx.fillRect(x, y, w, h);
+            }
+            drawTriangle(x, y, w, h, color) {
+                this.ctx.fillStyle = color;
+                this.ctx.beginPath();
+                this.ctx.moveTo(x, y + h);
+                this.ctx.lineTo(x + w / 2, y);
+                this.ctx.lineTo(x + w, y + h);
+                this.ctx.closePath();
+                this.ctx.fill();
+            }
+            drawImage(img, x, y, w, h) {
+                if (img && img.complete) {
+                    this.ctx.drawImage(img, x, y, w, h);
+                } else {
+                    this.drawRect(x, y, w, h, '#00ff00');
+                }
+            }
+        }
+
+        // --- ENGINE: AUDIO ---
+        class AudioEngine {
+            constructor() {
+                this.ctx = null;
+            }
+            init() {
+                if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            async playTone(freq, duration, type = 'sine') {
+                this.init();
+                if (this.ctx.state === 'suspended') await this.ctx.resume();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + duration);
+            }
+            playJump() { this.playTone(440, 0.1, 'square'); }
+            playDeath() { this.playTone(100, 0.3, 'sawtooth'); }
+            playLevelComplete() { 
+                this.playTone(523.25, 0.1); 
+                setTimeout(() => this.playTone(659.25, 0.1), 100);
+                setTimeout(() => this.playTone(783.99, 0.3), 200);
+            }
+        }
+
+        // --- GAME: PLAYER ---
+        class Player {
+            constructor() {
+                this.w = 32; this.h = 32;
+                this.speed = 400;
+                this.jumpForce = -800;
+                this.gravity = 2500;
+                this.color = '#00ff00';
+                this.reset();
+                this.image = new Image();
+                this.image.src = 'weston_profilke.png';
+            }
+            reset(x = 100, y = 100) {
+                this.x = x; this.y = y;
+                this.vx = 0; this.vy = 0;
+                this.onGround = false;
+                this.isDead = false;
+            }
+            update(dt, keys, platforms) {
+                if (this.isDead) return;
+                this.vx = 0;
+                if (keys['ArrowLeft'] || keys['a']) this.vx = -this.speed;
+                if (keys['ArrowRight'] || keys['d']) this.vx = this.speed;
+                this.x += this.vx * dt;
+                this.vy += this.gravity * dt;
+                this.y += this.vy * dt;
+                if ((keys['ArrowUp'] || keys['w'] || keys[' ']) && this.onGround) {
+                    this.vy = this.jumpForce;
+                    this.onGround = false;
+                    return 'jump';
+                }
+                this.onGround = false;
+                for (const p of platforms) Physics.resolvePlatformCollision(this, p);
+                if (this.y > 720) this.isDead = true;
+                if (this.x < 0) this.x = 0;
+                if (this.x + this.w > 1280) this.x = 1280 - this.w;
+            }
+            draw(renderer) {
+                renderer.drawImage(this.image, this.x, this.y, this.w, this.h);
+            }
+        }
+
+        // --- GAME: LEVEL GENERATOR ---
+        class LevelGenerator {
+            static MAX_JUMP_HEIGHT = 120;  // standalone has stronger jump (800²/2*2500=128)
+            static MAX_JUMP_DIST = 240;    // standalone: 400*0.64*1.0 ≈ 256, use conservative
+            static seededRandom(seed) {
+                return () => {
+                    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+                    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+                    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+                    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+                };
+            }
+            static maxStepUp(gap) {
+                const t = gap / 400; // standalone Vx=400
+                const h = 800 * t - 1250 * t * t; // standalone Vy=800, g=2500
+                return Math.max(0, h - 15);
+            }
+            static pick(arr, rng) { return arr[Math.floor(rng() * arr.length)]; }
+            static randRange(min, max, rng) { return min + rng() * (max - min); }
+            static randInt(min, max, rng) { return Math.floor(this.randRange(min, max + 1, rng)); }
+
+            static generateLevel(id) {
+                const rng = this.seededRandom(id * 91573 + 48271);
+                const archetypes = id <= 3 ? ['gauntlet','platformer','mixed']
+                    : id <= 10 ? ['gauntlet','platformer','mixed','zigzag']
+                    : id <= 25 ? ['gauntlet','platformer','mixed','zigzag','aerial']
+                    : ['gauntlet','platformer','mixed','zigzag','aerial','gapcross'];
+                const archetype = this.pick(archetypes, rng);
+
+                const level = { id, start:{x:64,y:500}, goal:{x:1150,y:500}, platforms:[], hazards:[] };
+                const t = Math.min(1, (id - 1) / 299);
+                const MJH = this.MAX_JUMP_HEIGHT, MJD = this.MAX_JUMP_DIST;
+                const diff = {
+                    spikeCount: Math.min(18, 3 + Math.floor(id * 0.1)),
+                    platformCount: 2 + Math.floor(id * 0.35),
+                    movingHazards: Math.min(12, id >= 3 ? 1 + Math.floor((id - 3) / 20) : 0),
+                    spikeWidth: Math.max(24, 36 - Math.floor(id * 0.05)),
+                    platformMinW: Math.max(50, 180 - id * 0.5),
+                    platformMaxW: Math.max(80, 260 - id * 0.4),
+                    gapMin: Math.min(MJD - 40, 80 + t * 80), 
+                    gapMax: Math.min(MJD, 140 + t * 60),
+                };
+
+                const addOrbs = (lvl, d, r, yMin, yMax) => {
+                    for (let i = 0; i < d.movingHazards; i++) {
+                        let attempts = 0, valid = false, hazard = null;
+                        while (!valid && attempts < 50) {
+                            attempts++;
+                            const x = this.randRange(180, 1060, r);
+                            const w = 24;
+                            const overlap = lvl.hazards.some(h => x < h.x + h.w + 40 && x + w + 40 > h.x);
+                            if (!overlap) {
+                                valid = true;
+                                hazard = { type:'floating_orb', x, y:this.randRange(yMin,yMax,r), w, h:24, movement:'oscillate', offset:r()*1000 };
+                            }
+                        }
+                        if (valid && hazard) lvl.hazards.push(hazard);
+                    }
+                };
+
+                if (archetype === 'gauntlet') {
+                    level.platforms.push({x:0,y:600,w:1280,h:120});
+                    const count = diff.spikeCount + this.randInt(0,3,rng);
+                    const spacing = 850 / (count + 1);
+                    for (let i = 0; i < count; i++) {
+                        const jitter = this.randRange(-spacing*0.3, spacing*0.3, rng);
+                        const x = 180 + spacing*(i+1) + jitter;
+                        if (x > 130 && x < 1080) level.hazards.push({type:'ground_spike',x,y:572,w:this.randInt(24,diff.spikeWidth+8,rng),h:28});
+                    }
+                    const jp = this.randInt(1, Math.min(diff.platformCount,4), rng);
+                    for (let i = 0; i < jp; i++) level.platforms.push({x:this.randRange(200,1000,rng),y:this.randRange(600-MJH,540,rng),w:this.randRange(80,160,rng),h:20});
+                    addOrbs(level,diff,rng,300,520);
+                    level.goal = {x:this.randRange(1050,1180,rng), y:568};
+                } else if (archetype === 'platformer') {
+                    level.platforms.push({x:0,y:600,w:200,h:120});
+                    const count = this.randInt(Math.max(3,diff.platformCount-2), diff.platformCount+2, rng);
+                    let cx=180, cy=560; const goals=[];
+                    for (let i=0;i<count;i++){
+                        const gap=this.randRange(diff.gapMin,diff.gapMax,rng);
+                        const maxUp=this.maxStepUp(gap);
+                        const dy=this.randRange(-Math.min(maxUp,80),40,rng);
+                        cx+=gap; cy=Math.max(180,Math.min(570,cy+dy));
+                        const pw=this.randRange(diff.platformMinW,diff.platformMaxW,rng);
+                        if(cx+pw>1280) break;
+                        level.platforms.push({x:cx,y:cy,w:pw,h:20});
+                        goals.push({x:cx+pw/2-16,y:cy-34});
+                        if(rng()<0.35&&pw>100) level.hazards.push({type:'ground_spike',x:cx+this.randRange(35,pw-60,rng),y:cy-28,w:28,h:28});
+                    }
+                    addOrbs(level,diff,rng,200,480);
+                    level.goal = goals.length ? goals[goals.length-1] : {x:1100,y:568};
+                } else if (archetype === 'mixed') {
+                    const segs=this.randInt(2,4,rng); let fx=0; const segW=1280/segs;
+                    for(let i=0;i<segs;i++){
+                        const gapW=i===0?0:this.randRange(60,Math.min(diff.gapMax*0.7,MJD),rng); fx+=gapW;
+                        const floorW=segW-gapW;
+                        if(fx+floorW<=1300&&floorW>50) level.platforms.push({x:fx,y:600,w:floorW,h:120});
+                        fx+=floorW;
+                    }
+                    for(let i=0;i<diff.spikeCount;i++){
+                        const x=this.randRange(160,1060,rng);
+                        if(level.platforms.some(p=>p.y===600&&x>=p.x&&x+30<=p.x+p.w))
+                            level.hazards.push({type:'ground_spike',x,y:572,w:30,h:28});
+                    }
+                    for(let i=0;i<this.randInt(2,diff.platformCount,rng);i++)
+                        level.platforms.push({x:this.randRange(150,1050,rng),y:this.randRange(600-MJH,530,rng),w:this.randRange(diff.platformMinW,diff.platformMaxW,rng),h:20});
+                    addOrbs(level,diff,rng,300,520);
+                    if(rng()<0.4&&level.platforms.length>2){const lp=level.platforms[level.platforms.length-1]; level.goal={x:lp.x+lp.w/2,y:lp.y-34};}
+                    else level.goal={x:this.randRange(1050,1180,rng),y:568};
+                } else if (archetype === 'aerial') {
+                    const sy=this.randRange(380,500,rng);
+                    level.platforms.push({x:30,y:sy,w:140,h:20}); level.start={x:60,y:sy-34};
+                    const count=this.randInt(5,diff.platformCount+3,rng); let cx=160,cy=sy;
+                    for(let i=0;i<count;i++){
+                        const gap=this.randRange(80,Math.min(diff.gapMax,MJD),rng);
+                        const maxUp=this.maxStepUp(gap);
+                        const dy=this.randRange(-Math.min(maxUp,80),50,rng);
+                        cx+=gap; cy=Math.max(140,Math.min(550,cy+dy));
+                        const pw=this.randRange(diff.platformMinW*0.8,diff.platformMaxW*0.8,rng);
+                        if(cx+pw>1260) break;
+                        level.platforms.push({x:cx,y:cy,w:pw,h:20});
+                        if(rng()<0.4&&pw>100) level.hazards.push({type:'ground_spike',x:cx+this.randRange(35,pw-60,rng),y:cy-28,w:26,h:28});
+                    }
+                    addOrbs(level,diff,rng,150,450);
+                    const lp=level.platforms[level.platforms.length-1]; level.goal={x:lp.x+lp.w/2-16,y:lp.y-34};
+                } else if (archetype === 'zigzag') {
+                    level.platforms.push({x:0,y:600,w:160,h:120});
+                    const count=this.randInt(5,diff.platformCount+3,rng); let cx=140, cy=560, goingUp=true;
+                    for(let i=0;i<count;i++){
+                        const gap=this.randRange(70,130,rng);
+                        const maxUp=this.maxStepUp(gap);
+                        const step=this.randRange(50,Math.min(maxUp,95),rng);
+                        cx+=gap;
+                        if(goingUp) cy=Math.max(150,cy-step); else cy=Math.min(560,cy+step);
+                        goingUp=!goingUp;
+                        const pw=this.randRange(diff.platformMinW,diff.platformMaxW,rng);
+                        if(cx+pw>1260) break;
+                        level.platforms.push({x:cx,y:cy,w:pw,h:20});
+                        if(rng()<0.3&&pw>100) level.hazards.push({type:'ground_spike',x:cx+this.randRange(35,pw-60,rng),y:cy-28,w:28,h:28});
+                    }
+                    addOrbs(level,diff,rng,200,480);
+                    const lp=level.platforms[level.platforms.length-1]; level.goal={x:lp.x+lp.w/2-16,y:lp.y-34};
+                } else { // gapcross
+                    const gc=this.randInt(3,6,rng); let fx=0;
+                    for(let i=0;i<=gc;i++){
+                        const fw=this.randRange(100,240,rng);
+                        level.platforms.push({x:fx,y:600,w:fw,h:120});
+                        if(i>0&&rng()<0.5) level.hazards.push({type:'ground_spike',x:fx+this.randRange(10,Math.max(20,fw-40),rng),y:572,w:28,h:28});
+                        fx+=fw;
+                        if(i<gc){const gw=this.randRange(Math.min(diff.gapMin*0.8,MJD),Math.min(diff.gapMax*1.1,MJD),rng);
+                            if(gw>140||rng()<0.3) level.platforms.push({x:fx+gw*0.4,y:this.randRange(500,570,rng),w:60,h:20});
+                            fx+=gw;}
+                    }
+                    for(let i=0;i<this.randInt(1,3,rng);i++) level.platforms.push({x:this.randRange(200,1000,rng),y:this.randRange(600-MJH,530,rng),w:this.randRange(70,150,rng),h:20});
+                    addOrbs(level,diff,rng,300,520);
+                    level.goal={x:Math.min(fx-60,1180),y:568};
+                }
+                return level;
+            }
+        }
+
+        // --- GAME: MAIN ---
+        class Game {
+            constructor() {
+                this.renderer = new Renderer('gameCanvas');
+                this.audio = new AudioEngine();
+                this.player = new Player();
+                this.currentLevelIndex = 1;
+                this.keys = {};
+                this.running = false;
+                this.lastTime = 0;
+
+                window.addEventListener('keydown', e => this.keys[e.key] = true);
+                window.addEventListener('keyup', e => this.keys[e.key] = false);
+                this.loadLevel();
+            }
+            loadLevel() {
+                this.level = LevelGenerator.generateLevel(this.currentLevelIndex);
+                this.player.reset(this.level.start.x, this.level.start.y);
+                document.getElementById('hud').innerText = `Level: ${this.currentLevelIndex}`;
+            }
+            start() {
+                this.audio.init();
+                document.getElementById('start-menu').classList.remove('active');
+                document.getElementById('level-menu').classList.remove('active');
+                this.running = true;
+                this.lastTime = performance.now();
+                requestAnimationFrame(t => this.loop(t));
+            }
+            loop(currentTime) {
+                if (!this.running) return;
+                const dt = Math.min((currentTime - this.lastTime) / 1000, 0.1);
+                this.lastTime = currentTime;
+                this.update(dt);
+                this.draw();
+                requestAnimationFrame(t => this.loop(t));
+            }
+            update(dt) {
+                const event = this.player.update(dt, this.keys, this.level.platforms);
+                if (event === 'jump') this.audio.playJump();
+                for (const h of this.level.hazards) {
+                    if (Physics.checkRectCollision(this.player, h)) this.player.isDead = true;
+                }
+                if (Physics.checkRectCollision(this.player, { ...this.level.goal, w: 32, h: 32 })) {
+                    this.audio.playLevelComplete();
+                    this.currentLevelIndex++;
+                    this.loadLevel();
+                }
+                if (this.player.isDead) {
+                    this.audio.playDeath();
+                    this.loadLevel();
+                }
+                if (this.keys['r']) this.loadLevel();
+            }
+            draw() {
+                this.renderer.clear();
+                for (const p of this.level.platforms) this.renderer.drawRect(p.x, p.y, p.w, p.h, '#444');
+                for (const h of this.level.hazards) this.renderer.drawTriangle(h.x, h.y, h.w, h.h, '#ff0000');
+                this.renderer.drawRect(this.level.goal.x, this.level.goal.y, 32, 32, '#ffff00');
+                this.player.draw(this.renderer);
+            }
+            showLevelSelect() {
+                document.getElementById('start-menu').classList.remove('active');
+                document.getElementById('level-menu').classList.add('active');
+            }
+            showStartMenu() {
+                document.getElementById('level-menu').classList.remove('active');
+                document.getElementById('start-menu').classList.add('active');
+            }
+            startLevel() {
+                const input = document.getElementById('level-input');
+                const levelId = parseInt(input.value) || 1;
+                this.currentLevelIndex = levelId;
+                this.loadLevel();
+                this.start();
+            }
+        }
+
+        const game = new Game();
+        window.game = game;
+    </script>
+</body>
+</html>
