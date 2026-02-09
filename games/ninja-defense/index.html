@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ninja Fruit Defense</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            touch-action: none;
+        }
+        #game-container {
+            position: relative;
+            width: 1280px;
+            height: 720px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            background-color: #2d5a27; /* Jungle green */
+            background-image: linear-gradient(to bottom, #1e3c1a, #2d5a27);
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .menu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 2rem;
+            border-radius: 10px;
+            text-align: center;
+            pointer-events: auto;
+            display: none;
+            border: 2px solid #e74c3c;
+            box-shadow: 0 0 15px rgba(231, 76, 60, 0.3);
+            min-width: 300px;
+        }
+        .menu.active {
+            display: block;
+        }
+        h1 {
+            color: #e74c3c;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin-bottom: 1rem;
+        }
+        button {
+            background: #111;
+            color: #fff;
+            border: 1px solid #e74c3c;
+            padding: 12px 24px;
+            margin: 8px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            width: 220px;
+        }
+        button:hover:not(:disabled) {
+            background: #e74c3c;
+            color: #fff;
+            box-shadow: 0 0 10px #e74c3c;
+        }
+        button:disabled {
+            border-color: #555;
+            color: #555;
+            cursor: not-allowed;
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 1.5rem;
+            pointer-events: none;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            color: #fff;
+        }
+        .stat-box {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 15px;
+            border-radius: 5px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        #upgrade-menu .upgrade-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            background: rgba(255,255,255,0.05);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .upgrade-info {
+            text-align: left;
+            flex-grow: 1;
+        }
+        .upgrade-name {
+            font-weight: bold;
+            color: #f1c40f;
+        }
+        .upgrade-cost {
+            font-size: 0.9rem;
+            color: #2ecc71;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer">
+            <div id="hud">
+                <div class="stat-box">Health: <span id="health-val">20</span>/<span id="max-health-val">20</span></div>
+                <div class="stat-box">Round: <span id="round-val">1</span></div>
+                <div class="stat-box">Coins: <span id="coins-val">0</span></div>
+            </div>
+            
+            <div id="start-menu" class="menu active">
+                <h1>Ninja Defense</h1>
+                <p>Defend the treehouse from flying fruit!</p>
+                <button onclick="game.start()">Start Game</button>
+            </div>
+
+            <div id="upgrade-menu" class="menu">
+                <h1>Round Complete!</h1>
+                <div id="upgrade-list">
+                    <!-- Upgrades will be injected here -->
+                </div>
+                <button onclick="game.nextRound()" style="margin-top: 20px; border-color: #2ecc71;">Next Round</button>
+            </div>
+
+            <div id="game-over-menu" class="menu">
+                <h1>Game Over</h1>
+                <p>The fruit overwhelmed you.</p>
+                <p>Final Round: <span id="final-round">1</span></p>
+                <button onclick="location.reload()">Try Again</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONSTANTS ---
+        const CANVAS_WIDTH = 1280;
+        const CANVAS_HEIGHT = 720;
+        const TREEHOUSE_X = 100;
+        const TREEHOUSE_Y = 360;
+        const LAUNCHER_X = 1100;
+
+        // --- UTILS ---
+        class Vec2 {
+            constructor(x, y) { this.x = x; this.y = y; }
+            add(v) { return new Vec2(this.x + v.x, this.y + v.y); }
+            sub(v) { return new Vec2(this.x - v.x, this.y - v.y); }
+            mul(s) { return new Vec2(this.x * s, this.y * s); }
+            mag() { return Math.sqrt(this.x * this.x + this.y * this.y); }
+            normalize() {
+                const m = this.mag();
+                return m > 0 ? new Vec2(this.x / m, this.y / m) : new Vec2(0, 0);
+            }
+        }
+
+        // --- FRUIT TYPES ---
+        const FRUIT_TYPES = {
+            APPLE: { name: 'Apple', health: 1, speed: 200, coins: 1, color: '#ff4d4d', radius: 25 },
+            ORANGE: { name: 'Orange', health: 2, speed: 250, coins: 2, color: '#ffa500', radius: 28 },
+            KIWI: { name: 'Kiwi', health: 2, speed: 350, coins: 3, color: '#8eb021', radius: 22 },
+            WATERMELON: { name: 'Watermelon', health: 5, speed: 150, coins: 5, color: '#2ecc71', radius: 40 },
+            PINEAPPLE: { name: 'Pineapple', health: 12, speed: 180, coins: 12, color: '#f1c40f', radius: 35 },
+            DRAGONFRUIT: { name: 'Dragonfruit', health: 20, speed: 220, coins: 25, color: '#ff00ff', radius: 32 },
+            PAPAYA: { name: 'Papaya', health: 8, speed: 400, coins: 20, color: '#f39c12', radius: 30 }
+        };
+
+        // --- WEAPON TYPES ---
+        const WEAPONS = [
+            { id: 0, name: 'Basic Stars', damage: 1, speed: 2.0, range: 1000, color: '#bdc3c7', type: 'projectile', visual: 'star' },
+            { id: 1, name: 'Pea Shooter', damage: 2, speed: 3.0, range: 1000, color: '#2ecc71', type: 'projectile', visual: 'pea' },
+            { id: 2, name: 'Kunai', damage: 4, speed: 1.5, range: 1000, color: '#7f8c8d', type: 'pierce', visual: 'kunai' },
+            { id: 3, name: 'Fireball', damage: 8, speed: 1.0, range: 1000, color: '#e67e22', type: 'aoe', visual: 'fire' },
+            { id: 4, name: 'Katana', damage: 15, speed: 1.2, range: 250, color: '#ffffff', type: 'slash', visual: 'blade' }
+        ];
+
+        // --- ENGINE: RENDERER ---
+        class Renderer {
+            constructor(canvasId) {
+                this.canvas = document.getElementById(canvasId);
+                this.ctx = this.canvas.getContext('2d');
+                this.canvas.width = CANVAS_WIDTH;
+                this.canvas.height = CANVAS_HEIGHT;
+                
+                // Load ninja image
+                this.ninjaImage = new Image();
+                this.ninjaImage.src = '../../images/weston_profilke.png';
+
+                // Load fruit images
+                this.fruitImages = {};
+                const fruitPaths = {
+                    'Apple': '../../images/callan.PNG',
+                    'Orange': '../../images/carter.PNG',
+                    'Dragonfruit': '../../images/chinmay.PNG',
+                    'Kiwi': '../../images/cole.PNG',
+                    'Watermelon': '../../images/leo.PNG',
+                    'Pineapple': '../../images/vivaan.PNG',
+                    'Papaya': '../../images/callan.PNG' // Reuse callan for papaya or pick another
+                };
+                for (const [name, path] of Object.entries(fruitPaths)) {
+                    const img = new Image();
+                    img.src = path;
+                    this.fruitImages[name] = img;
+                }
+            }
+            clear() {
+                // Background
+                const grad = this.ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+                grad.addColorStop(0, '#1e3c1a');
+                grad.addColorStop(1, '#2d5a27');
+                this.ctx.fillStyle = grad;
+                this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+                
+                // Ground
+                this.ctx.fillStyle = '#1a3316';
+                this.ctx.fillRect(0, 600, CANVAS_WIDTH, 120);
+
+                // Wall/Launcher
+                this.ctx.fillStyle = '#4a4a4a';
+                this.ctx.fillRect(LAUNCHER_X, 100, 180, 500);
+                this.ctx.strokeStyle = '#333';
+                this.ctx.lineWidth = 5;
+                this.ctx.strokeRect(LAUNCHER_X, 100, 180, 500);
+            }
+            drawTreehouse(x, y) {
+                this.ctx.fillStyle = '#5d4037';
+                this.ctx.fillRect(x - 40, y + 40, 80, 320); // Trunk
+                this.ctx.fillStyle = '#795548';
+                this.ctx.fillRect(x - 60, y - 20, 120, 60); // Platform
+                this.ctx.strokeStyle = '#3e2723';
+                this.ctx.lineWidth = 3;
+                this.ctx.strokeRect(x - 60, y - 20, 120, 60);
+            }
+            drawNinja(x, y, attacking, weapon) {
+                this.ctx.save();
+                this.ctx.translate(x, y);
+                
+                if (this.ninjaImage.complete) {
+                    // Draw image instead of circles
+                    const size = 80;
+                    this.ctx.drawImage(this.ninjaImage, -size/2, -size, size, size);
+                } else {
+                    // Fallback to original body if image not loaded
+                    this.ctx.fillStyle = '#000';
+                    this.ctx.beginPath();
+                    this.ctx.arc(0, -50, 20, 0, Math.PI * 2); // Head
+                    this.ctx.fill();
+                    this.ctx.fillRect(-15, -30, 30, 40); // Torso
+                    
+                    // Eyes (Red)
+                    this.ctx.fillStyle = '#f00';
+                    this.ctx.fillRect(-10, -55, 5, 2);
+                    this.ctx.fillRect(5, -55, 5, 2);
+                }
+
+                // Weapon visual
+                if (weapon) {
+                    this.ctx.strokeStyle = weapon.color;
+                    this.ctx.lineWidth = 4;
+                    if (attacking) {
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(20, -20);
+                        this.ctx.lineTo(60, -40);
+                        this.ctx.stroke();
+                    } else {
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(10, -10);
+                        this.ctx.lineTo(30, 10);
+                        this.ctx.stroke();
+                    }
+                }
+                
+                this.ctx.restore();
+            }
+            drawFruit(fruit) {
+                const img = this.fruitImages[fruit.type.name];
+                if (img && img.complete) {
+                    const size = fruit.type.radius * 2.5; // Slightly larger than the collision radius
+                    this.ctx.drawImage(img, fruit.pos.x - size/2, fruit.pos.y - size/2, size, size);
+                } else {
+                    this.ctx.fillStyle = fruit.type.color;
+                    this.ctx.beginPath();
+                    this.ctx.arc(fruit.pos.x, fruit.pos.y, fruit.type.radius, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    this.ctx.strokeStyle = '#fff';
+                    this.ctx.lineWidth = 2;
+                    this.ctx.stroke();
+                }
+                
+                // Health bar for fruit
+                if (fruit.health < fruit.type.health) {
+                    const barW = fruit.type.radius * 2;
+                    this.ctx.fillStyle = '#000';
+                    this.ctx.fillRect(fruit.pos.x - barW/2, fruit.pos.y - fruit.type.radius - 10, barW, 4);
+                    this.ctx.fillStyle = '#f00';
+                    this.ctx.fillRect(fruit.pos.x - barW/2, fruit.pos.y - fruit.type.radius - 10, barW * (fruit.health / fruit.type.health), 4);
+                }
+            }
+            drawProjectile(p) {
+                this.ctx.save();
+                this.ctx.translate(p.pos.x, p.pos.y);
+                
+                if (p.visual === 'star') {
+                    this.ctx.shadowBlur = 15;
+                    this.ctx.shadowColor = p.color;
+                    this.ctx.fillStyle = p.color;
+                    this.ctx.beginPath();
+                    for (let i = 0; i < 5; i++) {
+                        this.ctx.rotate(Math.PI * 2 / 5);
+                        this.ctx.lineTo(0, 10);
+                        this.ctx.lineTo(2, 2);
+                    }
+                    this.ctx.fill();
+                    this.ctx.shadowBlur = 0;
+                } else if (p.visual === 'pea') {
+                    this.ctx.fillStyle = '#2ecc71';
+                    this.ctx.beginPath();
+                    this.ctx.arc(0, 0, 6, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    this.ctx.fillStyle = '#27ae60';
+                    this.ctx.beginPath();
+                    this.ctx.arc(-2, -2, 2, 0, Math.PI * 2);
+                    this.ctx.fill();
+                } else if (p.visual === 'kunai') {
+                    this.ctx.fillStyle = p.color;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(15, 0);
+                    this.ctx.lineTo(-5, -5);
+                    this.ctx.lineTo(-5, 5);
+                    this.ctx.closePath();
+                    this.ctx.fill();
+                } else if (p.visual === 'fire') {
+                    const grad = this.ctx.createRadialGradient(0, 0, 2, 0, 0, 12);
+                    grad.addColorStop(0, '#f1c40f');
+                    grad.addColorStop(0.5, '#e67e22');
+                    grad.addColorStop(1, 'transparent');
+                    this.ctx.fillStyle = grad;
+                    this.ctx.beginPath();
+                    this.ctx.arc(0, 0, 12, 0, Math.PI * 2);
+                    this.ctx.fill();
+                } else {
+                    this.ctx.fillStyle = p.color;
+                    this.ctx.beginPath();
+                    this.ctx.arc(0, 0, 5, 0, Math.PI * 2);
+                    this.ctx.fill();
+                }
+                
+                this.ctx.restore();
+            }
+            drawEffect(e) {
+                this.ctx.fillStyle = e.color;
+                this.ctx.globalAlpha = e.life;
+                this.ctx.beginPath();
+                this.ctx.arc(e.pos.x, e.pos.y, e.size, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.globalAlpha = 1.0;
+            }
+        }
+
+        // --- GAME CLASSES ---
+        class Fruit {
+            constructor(type, startY) {
+                this.type = type;
+                this.pos = new Vec2(LAUNCHER_X, startY);
+                this.health = type.health;
+                this.dead = false;
+                const target = new Vec2(TREEHOUSE_X, TREEHOUSE_Y);
+                this.vel = target.sub(this.pos).normalize().mul(type.speed);
+            }
+            update(dt) {
+                this.pos = this.pos.add(this.vel.mul(dt));
+                if (this.pos.x < TREEHOUSE_X + 40) {
+                    return true; // Hit player
+                }
+                return false;
+            }
+        }
+
+        class Projectile {
+            constructor(pos, vel, damage, color, type, visual) {
+                this.pos = pos;
+                this.vel = vel;
+                this.damage = damage;
+                this.color = color;
+                this.type = type;
+                this.visual = visual;
+                this.dead = false;
+                this.hitFruits = new Set();
+                this.homingRange = 1200; // Increased range to detect fruit
+                this.homingStrength = 10.0; // Increased strength for better locking
+            }
+            update(dt, fruits) {
+                // No more homing/circling - projectiles just go straight through
+                this.pos = this.pos.add(this.vel.mul(dt));
+                // Disappear only through the "black thing" (launcher/wall)
+                if (this.pos.x > LAUNCHER_X + 180 || this.pos.y < -100 || this.pos.y > CANVAS_HEIGHT + 100 || this.pos.x < -100) {
+                    this.dead = true;
+                }
+            }
+        }
+
+        class Game {
+            constructor() {
+                this.renderer = new Renderer('gameCanvas');
+                this.player = {
+                    health: 20,
+                    maxHealth: 20,
+                    coins: 0,
+                    weaponIndex: 0,
+                    attackTimer: 0,
+                    attacking: false,
+                    damageBonus: 0,
+                    speedBonus: 1.0
+                };
+                this.round = 1;
+                this.fruits = [];
+                this.projectiles = [];
+                this.effects = [];
+                this.running = false;
+                this.roundActive = false;
+                this.fruitsToSpawn = 0;
+                this.spawnTimer = 0;
+                this.lastTime = 0;
+                this.mousePos = new Vec2(LAUNCHER_X, TREEHOUSE_Y);
+
+                window.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+                window.addEventListener('mousedown', () => this.handleInput());
+                window.addEventListener('keydown', (e) => {
+                    if (e.code === 'Space') {
+                        e.preventDefault();
+                        this.handleInput();
+                    }
+                });
+                window.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    this.handleInput();
+                });
+            }
+
+            handleMouseMove(e) {
+                const rect = this.renderer.canvas.getBoundingClientRect();
+                const scaleX = CANVAS_WIDTH / rect.width;
+                const scaleY = CANVAS_HEIGHT / rect.height;
+                this.mousePos.x = (e.clientX - rect.left) * scaleX;
+                this.mousePos.y = (e.clientY - rect.top) * scaleY;
+            }
+
+            handleInput() {
+                if (!this.running || !this.roundActive) return;
+                this.attack();
+            }
+
+            start() {
+                document.getElementById('start-menu').classList.remove('active');
+                this.running = true;
+                this.startRound();
+                this.lastTime = performance.now();
+                requestAnimationFrame(t => this.loop(t));
+            }
+
+            startRound() {
+                this.roundActive = true;
+                this.player.health = this.player.maxHealth;
+                this.updateUI();
+                
+                // Difficulty scaling
+                this.fruitsToSpawn = 5 + this.round * 3;
+                this.spawnInterval = Math.max(0.5, 2.0 - (this.round * 0.1));
+                this.spawnTimer = 0;
+                this.fruits = [];
+                this.projectiles = [];
+            }
+
+            nextRound() {
+                this.round++;
+                document.getElementById('upgrade-menu').classList.remove('active');
+                this.startRound();
+            }
+
+            attack() {
+                const weapon = WEAPONS[this.player.weaponIndex];
+                if (this.player.attackTimer > 0) return;
+
+                this.player.attacking = true;
+                setTimeout(() => this.player.attacking = false, 100);
+
+                const attackSpeed = weapon.speed * this.player.speedBonus;
+                this.player.attackTimer = 1.0 / attackSpeed;
+
+                const damage = weapon.damage + this.player.damageBonus;
+
+                if (weapon.type === 'melee' || weapon.type === 'slash') {
+                    // Check area in front of player
+                    this.fruits.forEach(f => {
+                        const dist = f.pos.sub(new Vec2(TREEHOUSE_X, TREEHOUSE_Y)).mag();
+                        if (dist < weapon.range) {
+                            this.damageFruit(f, damage);
+                        }
+                    });
+                } else {
+                    // Launch projectile towards mouse position
+                    const startPos = new Vec2(TREEHOUSE_X + 20, TREEHOUSE_Y - 30);
+                    const dir = this.mousePos.sub(startPos).normalize();
+                    const vel = dir.mul(800);
+                    
+                    this.projectiles.push(new Projectile(
+                        startPos,
+                        vel,
+                        damage,
+                        weapon.color,
+                        weapon.type,
+                        weapon.visual
+                    ));
+                }
+            }
+
+            damageFruit(fruit, damage) {
+                fruit.health -= damage;
+                this.effects.push({
+                    pos: new Vec2(fruit.pos.x, fruit.pos.y),
+                    color: fruit.type.color,
+                    size: fruit.type.radius,
+                    life: 1.0
+                });
+                if (fruit.health <= 0) {
+                    fruit.dead = true;
+                    this.player.coins += fruit.type.coins;
+                    this.updateUI();
+                }
+            }
+
+            spawnFruit() {
+                if (this.fruitsToSpawn <= 0) return;
+                
+                // Pick fruit type based on round
+                let types = [FRUIT_TYPES.APPLE];
+                if (this.round >= 2) types.push(FRUIT_TYPES.ORANGE);
+                if (this.round >= 4) types.push(FRUIT_TYPES.KIWI);
+                if (this.round >= 7) types.push(FRUIT_TYPES.WATERMELON);
+                if (this.round >= 10) types.push(FRUIT_TYPES.PINEAPPLE);
+                if (this.round >= 15) types.push(FRUIT_TYPES.DRAGONFRUIT);
+                if (this.round >= 20) types.push(FRUIT_TYPES.PAPAYA);
+
+                const type = types[Math.floor(Math.random() * types.length)];
+                const startY = 150 + Math.random() * 400;
+                this.fruits.push(new Fruit(type, startY));
+                this.fruitsToSpawn--;
+            }
+
+            loop(currentTime) {
+                if (!this.running) return;
+                const dt = Math.min((currentTime - this.lastTime) / 1000, 0.1);
+                this.lastTime = currentTime;
+
+                this.update(dt);
+                this.draw();
+                requestAnimationFrame(t => this.loop(t));
+            }
+
+            update(dt) {
+                if (!this.roundActive) return;
+
+                if (this.player.attackTimer > 0) {
+                    this.player.attackTimer -= dt;
+                }
+
+                this.spawnTimer += dt;
+                if (this.spawnTimer >= this.spawnInterval) {
+                    this.spawnTimer = 0;
+                    this.spawnFruit();
+                }
+
+                // Update fruits
+                for (let i = this.fruits.length - 1; i >= 0; i--) {
+                    const f = this.fruits[i];
+                    if (f.update(dt)) {
+                        this.player.health--;
+                        this.updateUI();
+                        this.fruits.splice(i, 1);
+                        if (this.player.health <= 0) this.gameOver();
+                        continue;
+                    }
+                    if (f.dead) {
+                        this.fruits.splice(i, 1);
+                    }
+                }
+
+                // Collision with fruits
+                for (let j = this.projectiles.length - 1; j >= 0; j--) {
+                    const p = this.projectiles[j];
+                    p.update(dt, this.fruits);
+                    
+                    // Collision with fruits
+                    this.fruits.forEach(f => {
+                        if (p.hitFruits.has(f)) return;
+                        const dist = p.pos.sub(f.pos).mag();
+                        if (dist < f.type.radius + 5) {
+                            this.damageFruit(f, p.damage);
+                            p.hitFruits.add(f);
+                            
+                            if (p.type === 'aoe') {
+                                // Splash damage
+                                this.fruits.forEach(otherF => {
+                                    if (otherF !== f) {
+                                        const splashDist = p.pos.sub(otherF.pos).mag();
+                                        if (splashDist < 100) {
+                                            this.damageFruit(otherF, p.damage / 2);
+                                        }
+                                    }
+                                });
+                            }
+                            // Projectiles now always go through the target and disappear into the wall
+                        }
+                    });
+
+                    if (p.dead) this.projectiles.splice(j, 1);
+                }
+
+                // Update effects
+                for (let i = this.effects.length - 1; i >= 0; i--) {
+                    this.effects[i].life -= dt * 3;
+                    if (this.effects[i].life <= 0) this.effects.splice(i, 1);
+                }
+
+                // Check round end
+                if (this.fruitsToSpawn <= 0 && this.fruits.length === 0) {
+                    this.roundComplete();
+                }
+            }
+
+            draw() {
+                this.renderer.clear();
+                this.renderer.drawTreehouse(TREEHOUSE_X, TREEHOUSE_Y);
+                
+                // Draw aim indicator (little gray thing)
+                this.renderer.ctx.fillStyle = 'rgba(189, 195, 199, 0.5)';
+                this.renderer.ctx.beginPath();
+                this.renderer.ctx.arc(this.mousePos.x, this.mousePos.y, 10, 0, Math.PI * 2);
+                this.renderer.ctx.fill();
+                this.renderer.ctx.strokeStyle = '#bdc3c7';
+                this.renderer.ctx.lineWidth = 2;
+                this.renderer.ctx.stroke();
+
+                const weapon = WEAPONS[this.player.weaponIndex];
+                this.renderer.drawNinja(TREEHOUSE_X, TREEHOUSE_Y, this.player.attacking, weapon);
+
+                this.fruits.forEach(f => this.renderer.drawFruit(f));
+                this.projectiles.forEach(p => this.renderer.drawProjectile(p));
+                this.effects.forEach(e => this.renderer.drawEffect(e));
+            }
+
+            updateUI() {
+                document.getElementById('health-val').innerText = Math.max(0, this.player.health);
+                document.getElementById('max-health-val').innerText = this.player.maxHealth;
+                document.getElementById('round-val').innerText = this.round;
+                document.getElementById('coins-val').innerText = this.player.coins;
+            }
+
+            roundComplete() {
+                this.roundActive = false;
+                this.showUpgrades();
+            }
+
+            showUpgrades() {
+                const menu = document.getElementById('upgrade-menu');
+                const list = document.getElementById('upgrade-list');
+                list.innerHTML = '';
+
+                const upgrades = [
+                    { name: 'Max Health', cost: 10 + this.player.maxHealth, action: () => {
+                        this.player.maxHealth += 5;
+                        this.player.health = this.player.maxHealth;
+                    }},
+                    { name: 'Attack Damage', cost: 15 + this.player.damageBonus * 10, action: () => {
+                        this.player.damageBonus += 1;
+                    }},
+                    { name: 'Attack Speed', cost: 20 + Math.floor((this.player.speedBonus - 1) * 100), action: () => {
+                        this.player.speedBonus += 0.1;
+                    }}
+                ];
+
+                // Check for weapon unlock
+                if (this.player.weaponIndex < WEAPONS.length - 1) {
+                    const nextWeapon = WEAPONS[this.player.weaponIndex + 1];
+                    upgrades.push({
+                        name: `Unlock ${nextWeapon.name}`,
+                        cost: 50 * (this.player.weaponIndex + 1),
+                        action: () => {
+                            this.player.weaponIndex++;
+                        }
+                    });
+                }
+
+                upgrades.forEach(up => {
+                    const div = document.createElement('div');
+                    div.className = 'upgrade-item';
+                    div.innerHTML = `
+                        <div class="upgrade-info">
+                            <div class="upgrade-name">${up.name}</div>
+                            <div class="upgrade-cost">Cost: ${up.cost} coins</div>
+                        </div>
+                        <button onclick="game.buyUpgrade(${up.cost}, ${upgrades.indexOf(up)})" ${this.player.coins < up.cost ? 'disabled' : ''}>Buy</button>
+                    `;
+                    list.appendChild(div);
+                });
+
+                this.upgrades = upgrades; // Store for buyUpgrade
+                menu.classList.add('active');
+            }
+
+            buyUpgrade(cost, index) {
+                if (this.player.coins >= cost) {
+                    this.player.coins -= cost;
+                    this.upgrades[index].action();
+                    this.updateUI();
+                    this.showUpgrades(); // Refresh list
+                }
+            }
+
+            gameOver() {
+                this.roundActive = false;
+                document.getElementById('final-round').innerText = this.round;
+                document.getElementById('game-over-menu').classList.add('active');
+            }
+        }
+
+        const game = new Game();
+        window.game = game;
+    </script>
+</body>
+</html>

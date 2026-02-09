@@ -149,20 +149,20 @@
                 this.playerImg = new Image();
                 this.playerImg.src = '../../images/weston_profilke.png';
                 
-                // Hazard images
+                // Hazard images and difficulty weights
                 this.hazardImages = [];
-                const hazardPaths = [
-                    '../../images/callan.PNG',
-                    '../../images/carter.PNG',
-                    '../../images/chinmay.PNG',
-                    '../../images/cole.PNG',
-                    '../../images/leo.PNG',
-                    '../../images/vivaan.PNG'
+                const hazardData = [
+                    { path: '../../images/callan.PNG', weight: 1 },
+                    { path: '../../images/carter.PNG', weight: 2 },
+                    { path: '../../images/chinmay.PNG', weight: 20 },
+                    { path: '../../images/cole.PNG', weight: 3 },
+                    { path: '../../images/leo.PNG', weight: 5 },
+                    { path: '../../images/vivaan.PNG', weight: 8 }
                 ];
-                hazardPaths.forEach(path => {
+                hazardData.forEach(data => {
                     const img = new Image();
-                    img.src = path;
-                    this.hazardImages.push(img);
+                    img.src = data.path;
+                    this.hazardImages.push({ img, weight: data.weight });
                 });
             }
             clear() {
@@ -195,7 +195,8 @@
                 this.ctx.shadowBlur = 0;
             }
             drawTriangle(x, y, w, h, color, upsideDown = false, hazardType = 0) {
-                const img = this.hazardImages[hazardType % this.hazardImages.length];
+                const hazard = this.hazardImages[hazardType % this.hazardImages.length];
+                const img = hazard ? hazard.img : null;
                 if (img && img.complete) {
                     this.ctx.save();
                     if (upsideDown) {
@@ -355,8 +356,9 @@
                 let currentX = 0;
                 while (currentX < level.width) {
                     const segmentW = 300 + rng() * 500;
-                    const floorH = 80 + rng() * (80 + difficulty * 180);
-                    const ceilH = 80 + rng() * (80 + difficulty * 180);
+                    const maxH = 220; // Ensure at least 280px gap (720 - 220 - 220 = 280)
+                    const floorH = 80 + rng() * (difficulty * (maxH - 80));
+                    const ceilH = 80 + rng() * (difficulty * (maxH - 80));
                     
                     // Ceiling
                     level.platforms.push({ x: currentX, y: 0, w: segmentW, h: ceilH });
@@ -370,7 +372,14 @@
                             const sx = currentX + rng() * (segmentW - 60);
                             const onCeil = rng() < 0.5;
                             const hazardType = Math.floor(rng() * 6);
-                            const hazardSize = 50 + rng() * 30;
+                            
+                            // Adjust size based on weight (difficulty)
+                            const weights = [1, 2, 20, 3, 5, 8]; // Matching Renderer's hazardData
+                            const weight = weights[hazardType];
+                            const baseSize = 50 + rng() * 30;
+                            const hazardSize = baseSize * (0.8 + (weight / 20) * 0.7); // Scale size by difficulty
+                            
+                            // Safety check: ensure spikes don't close the gap too much
                             if (onCeil) {
                                 level.hazards.push({ x: sx, y: ceilH, w: hazardSize, h: hazardSize, upsideDown: true, type: hazardType });
                             } else {
@@ -382,9 +391,12 @@
                     // Add middle obstacles in later levels
                     if (id > 2 && rng() < 0.4 + difficulty * 0.3) {
                         const obsW = 60 + rng() * 120;
-                        const obsH = 150 + rng() * 250;
-                        const obsY = 150 + rng() * 250;
-                        level.platforms.push({ x: currentX + segmentW/2, y: obsY, w: obsW, h: obsH });
+                        const obsH = 100 + rng() * 150;
+                        // Position middle obstacle to ensure passage above or below
+                        const obsY = ceilH + 100 + rng() * (720 - floorH - ceilH - obsH - 200);
+                        if (obsY > ceilH + 80 && obsY + obsH < 720 - floorH - 80) {
+                            level.platforms.push({ x: currentX + segmentW/2, y: obsY, w: obsW, h: obsH });
+                        }
                     }
 
                     currentX += segmentW;
