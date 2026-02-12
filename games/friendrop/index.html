@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Friendrop</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            touch-action: none;
+        }
+        #game-container {
+            position: relative;
+            width: 1280px;
+            height: 720px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            background-color: #0d1117;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        #ui-layer .menu {
+            pointer-events: auto;
+        }
+        .menu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 2rem;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            border: 2px solid #7c3aed;
+            box-shadow: 0 0 15px rgba(124, 58, 237, 0.3);
+            min-width: 300px;
+        }
+        .menu.active {
+            display: block;
+        }
+        h1 {
+            color: #a78bfa;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin-bottom: 1rem;
+        }
+        button {
+            background: #111;
+            color: #a78bfa;
+            border: 1px solid #7c3aed;
+            padding: 12px 24px;
+            margin: 8px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        button:hover {
+            background: #7c3aed;
+            color: #fff;
+            box-shadow: 0 0 10px #7c3aed;
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 1.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            color: #a78bfa;
+        }
+        .stat-box {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 15px;
+            border-radius: 5px;
+            border: 1px solid rgba(124, 58, 237, 0.4);
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: #666;
+            font-size: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer">
+            <div id="hud">
+                <div class="stat-box">Score: <span id="score-val">0</span></div>
+                <div class="stat-box" id="timer-box"><span id="timer-val">5:00</span></div>
+                <div class="stat-box">Best: <span id="high-score-val">0</span></div>
+                <div class="stat-box">Next: <span id="next-friend">?</span></div>
+            </div>
+            <div id="start-menu" class="menu active">
+                <h1>Friendrop</h1>
+                <p>Drop and merge balls with your friends!</p>
+                <button onclick="game.start()">Start</button>
+            </div>
+            <div id="game-over-menu" class="menu">
+                <h1 id="game-over-title">Game Over</h1>
+                <p id="aura-msg" style="font-size:1.3rem; margin-bottom:10px;"></p>
+                <p>Final Score: <span id="final-score">0</span></p>
+                <p style="color:#888;">High Score: <span id="final-high-score">0</span></p>
+                <button onclick="game.restart()">Try Again</button>
+            </div>
+            <div id="instructions">Arrow keys: move &bull; Space: drop</div>
+        </div>
+    </div>
+
+    <script>
+        const CANVAS_WIDTH = 1280;
+        const CANVAS_HEIGHT = 720;
+        const BOX_X = 440;
+        const BOX_Y = 60;
+        const BOX_W = 400;
+        const BOX_H = 600;
+        const GAME_OVER_LINE = 150;
+        const DROPPER_SPEED = 350;
+        const GRAVITY = 900;
+        const REST_THRESHOLD = 3;
+        const BOUNCE = 0.3;
+        const FRICTION = 0.995;
+
+        const FRIENDS = [
+            { name: 'Callan',  path: '../../images/callan.PNG',         baseRadius: 25 },
+            { name: 'Carter',  path: '../../images/carter.PNG',         baseRadius: 30 },
+            { name: 'Chinmay', path: '../../images/chinmay.PNG',        baseRadius: 35 },
+            { name: 'Cole',    path: '../../images/cole.PNG',           baseRadius: 40 },
+            { name: 'Leo',     path: '../../images/leo.PNG',            baseRadius: 45 },
+            { name: 'Vivaan',  path: '../../images/vivaan.PNG',         baseRadius: 50 },
+            { name: 'Weston',  path: '../../images/weston_profilke.png', baseRadius: 60 }
+        ];
+
+        const DROP_COOLDOWN = 0.5; // seconds between drops
+        const MAX_SPAWN_TYPE = 3;  // only drop Callan, Carter, Chinmay randomly
+        const GAME_TIME = 300;     // 5 minutes in seconds
+
+        function radiusForFriend(friendType) {
+            return FRIENDS[friendType].baseRadius;
+        }
+
+        class Ball {
+            constructor(x, y, friendType) {
+                this.x = x;
+                this.y = y;
+                this.vx = 0;
+                this.vy = 0;
+                this.friendType = friendType;
+                this.radius = radiusForFriend(friendType);
+                this.merged = false;
+            }
+            isAtRest() {
+                return Math.abs(this.vx) < REST_THRESHOLD && Math.abs(this.vy) < REST_THRESHOLD;
+            }
+        }
+
+        class Game {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.canvas.width = CANVAS_WIDTH;
+                this.canvas.height = CANVAS_HEIGHT;
+
+                this.friendImages = [];
+                FRIENDS.forEach(f => {
+                    const img = new Image();
+                    img.src = f.path;
+                    this.friendImages.push(img);
+                });
+
+                this.dropperX = BOX_X + BOX_W / 2;
+                this.balls = [];
+                this.score = 0;
+                this.highScore = parseInt(localStorage.getItem('friendrop-highscore')) || 0;
+                this.nextFriendType = 0;
+                this.running = false;
+                this.gameOver = false;
+                this.keys = { left: false, right: false };
+                this.dropTimer = 0;
+                this.timeLeft = GAME_TIME;
+
+                // Screen pop effect state
+                this.screenFlash = 0;          // 0-1 flash intensity
+                this.popParticles = [];         // explosion particles
+                this.screenShake = 0;           // shake timer
+                this.westonMerges = 0;          // how many times Westons merged
+
+                document.getElementById('high-score-val').textContent = this.highScore;
+
+                window.addEventListener('keydown', e => {
+                    if (e.key === 'ArrowLeft') this.keys.left = true;
+                    if (e.key === 'ArrowRight') this.keys.right = true;
+                    if (e.key === ' ') {
+                        e.preventDefault();
+                        if (this.running && this.dropTimer <= 0 && !this.gameOver) {
+                            this.dropBall();
+                        }
+                    }
+                });
+                window.addEventListener('keyup', e => {
+                    if (e.key === 'ArrowLeft') this.keys.left = false;
+                    if (e.key === 'ArrowRight') this.keys.right = false;
+                });
+            }
+
+            dropBall() {
+                const r = radiusForFriend(this.nextFriendType);
+                const x = Math.max(BOX_X + r, Math.min(BOX_X + BOX_W - r, this.dropperX));
+                this.balls.push(new Ball(x, BOX_Y + r + 2, this.nextFriendType));
+                this.nextFriendType = Math.floor(Math.random() * MAX_SPAWN_TYPE);
+                this.dropTimer = DROP_COOLDOWN;
+                document.getElementById('next-friend').textContent = FRIENDS[this.nextFriendType].name;
+            }
+
+            update(dt) {
+                if (this.gameOver) return;
+
+                this.dropperX += (this.keys.right ? DROPPER_SPEED : 0) * dt;
+                this.dropperX -= (this.keys.left ? DROPPER_SPEED : 0) * dt;
+                this.dropperX = Math.max(BOX_X + 20, Math.min(BOX_X + BOX_W - 20, this.dropperX));
+
+                this.timeLeft -= dt;
+                if (this.timeLeft <= 0) {
+                    this.timeLeft = 0;
+                    this.endGame();
+                    return;
+                }
+
+                if (this.dropTimer > 0) this.dropTimer -= dt;
+
+                for (const b of this.balls) {
+                    b.vy += GRAVITY * dt;
+                    b.vx *= FRICTION;
+                    b.vy *= FRICTION;
+                    b.x += b.vx * dt;
+                    b.y += b.vy * dt;
+
+                    if (b.x - b.radius < BOX_X) {
+                        b.x = BOX_X + b.radius;
+                        b.vx = -b.vx * BOUNCE;
+                    }
+                    if (b.x + b.radius > BOX_X + BOX_W) {
+                        b.x = BOX_X + BOX_W - b.radius;
+                        b.vx = -b.vx * BOUNCE;
+                    }
+                    if (b.y - b.radius < BOX_Y) {
+                        b.y = BOX_Y + b.radius;
+                        b.vy = -b.vy * BOUNCE;
+                    }
+                    if (b.y + b.radius > BOX_Y + BOX_H) {
+                        b.y = BOX_Y + BOX_H - b.radius;
+                        b.vy = -b.vy * BOUNCE;
+                    }
+                }
+
+                for (let i = 0; i < this.balls.length; i++) {
+                    for (let j = i + 1; j < this.balls.length; j++) {
+                        const a = this.balls[i];
+                        const b = this.balls[j];
+                        if (a.merged || b.merged) continue;
+                        let dx = b.x - a.x;
+                        let dy = b.y - a.y;
+                        let dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < 0.01) {
+                            dx = (Math.random() - 0.5) * 2;
+                            dy = -1;
+                            dist = Math.sqrt(dx * dx + dy * dy);
+                        }
+                        const overlap = a.radius + b.radius - dist;
+                        if (overlap > 0) {
+                            const nx = dx / dist;
+                            const ny = dy / dist;
+                            const totalMass = a.radius * a.radius + b.radius * b.radius;
+                            const aMass = a.radius * a.radius;
+                            const bMass = b.radius * b.radius;
+                            a.x -= nx * overlap * (bMass / totalMass);
+                            a.y -= ny * overlap * (bMass / totalMass);
+                            b.x += nx * overlap * (aMass / totalMass);
+                            b.y += ny * overlap * (aMass / totalMass);
+                            const dvx = b.vx - a.vx;
+                            const dvy = b.vy - a.vy;
+                            const dn = dvx * nx + dvy * ny;
+                            if (dn < 0) {
+                                a.vx += (2 * bMass / totalMass) * dn * nx;
+                                a.vy += (2 * bMass / totalMass) * dn * ny;
+                                b.vx -= (2 * aMass / totalMass) * dn * nx;
+                                b.vy -= (2 * aMass / totalMass) * dn * ny;
+                            }
+                            // nudge so balls roll off instead of stacking
+                            const nudge = (Math.random() - 0.5) * 60;
+                            a.vx += nudge;
+                            b.vx -= nudge;
+                        }
+                    }
+                }
+
+                // merge: two same-friend balls touching → next friend up
+                const toMerge = [];
+                let westonMerge = false;
+                for (let i = 0; i < this.balls.length; i++) {
+                    for (let j = i + 1; j < this.balls.length; j++) {
+                        const a = this.balls[i];
+                        const b = this.balls[j];
+                        if (a.merged || b.merged) continue;
+                        if (a.friendType !== b.friendType) continue;
+                        const dx = b.x - a.x;
+                        const dy = b.y - a.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < a.radius + b.radius + 4) {
+                            if (a.friendType >= FRIENDS.length - 1) {
+                                // Two Westons merging — screen pop!
+                                westonMerge = true;
+                                a.merged = true;
+                                b.merged = true;
+                            } else {
+                                toMerge.push([i, j]);
+                                a.merged = true;
+                                b.merged = true;
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                for (const [i, j] of toMerge) {
+                    const a = this.balls[i];
+                    const b = this.balls[j];
+                    const nextType = a.friendType + 1;
+                    const mx = (a.x + b.x) / 2;
+                    const my = (a.y + b.y) / 2;
+                    this.balls.push(new Ball(mx, my, nextType));
+                    this.score += (nextType + 1) * 10;
+                }
+                this.balls = this.balls.filter(b => !b.merged);
+
+                // Weston merge: screen pop + clear board, keep score & time
+                if (westonMerge) {
+                    this.triggerScreenPop();
+                }
+
+                for (const b of this.balls) {
+                    if (b.isAtRest() && b.y - b.radius < BOX_Y + GAME_OVER_LINE) {
+                        this.endGame();
+                        break;
+                    }
+                }
+
+                document.getElementById('score-val').textContent = this.score;
+                const mins = Math.floor(this.timeLeft / 60);
+                const secs = Math.floor(this.timeLeft % 60);
+                const timerStr = mins + ':' + (secs < 10 ? '0' : '') + secs;
+                document.getElementById('timer-val').textContent = timerStr;
+                if (this.timeLeft < 30) {
+                    document.getElementById('timer-box').style.color = '#ef4444';
+                    document.getElementById('timer-box').style.borderColor = '#ef4444';
+                } else {
+                    document.getElementById('timer-box').style.color = '';
+                    document.getElementById('timer-box').style.borderColor = '';
+                }
+            }
+
+            endGame() {
+                this.gameOver = true;
+                document.getElementById('final-score').textContent = this.score;
+                document.getElementById('game-over-title').textContent = this.timeLeft <= 0 ? "Time's Up!" : 'Game Over';
+                const auraEl = document.getElementById('aura-msg');
+                if (this.score > this.highScore) {
+                    this.highScore = this.score;
+                    localStorage.setItem('friendrop-highscore', this.highScore);
+                    document.getElementById('high-score-val').textContent = this.highScore;
+                    auraEl.textContent = 'You have too much aura.';
+                    auraEl.style.color = '#a78bfa';
+                } else {
+                    auraEl.textContent = 'You do not have enough aura.';
+                    auraEl.style.color = '#ef4444';
+                }
+                document.getElementById('final-high-score').textContent = this.highScore;
+                document.getElementById('game-over-menu').classList.add('active');
+            }
+
+            triggerScreenPop() {
+                this.westonMerges++;
+                this.score += 500;  // big bonus for Weston merge
+                this.screenFlash = 1.0;
+                this.screenShake = 0.6; // seconds of shake
+
+                // Spawn explosion particles from center of the box
+                const cx = BOX_X + BOX_W / 2;
+                const cy = BOX_Y + BOX_H / 2;
+                const colors = ['#a78bfa', '#7c3aed', '#c084fc', '#e879f9', '#f0abfc', '#fbbf24', '#f87171', '#34d399'];
+                for (let i = 0; i < 120; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 200 + Math.random() * 600;
+                    this.popParticles.push({
+                        x: cx + (Math.random() - 0.5) * 100,
+                        y: cy + (Math.random() - 0.5) * 100,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        life: 0.8 + Math.random() * 0.7,
+                        maxLife: 0.8 + Math.random() * 0.7,
+                        size: 4 + Math.random() * 10,
+                        color: colors[Math.floor(Math.random() * colors.length)]
+                    });
+                }
+
+                // Clear the board after a short delay (balls fade during flash)
+                this.balls = [];
+            }
+
+            updateEffects(dt) {
+                // Screen flash fade
+                if (this.screenFlash > 0) {
+                    this.screenFlash = Math.max(0, this.screenFlash - dt * 2.0);
+                }
+                // Screen shake
+                if (this.screenShake > 0) {
+                    this.screenShake = Math.max(0, this.screenShake - dt);
+                }
+                // Particles
+                for (const p of this.popParticles) {
+                    p.x += p.vx * dt;
+                    p.y += p.vy * dt;
+                    p.vy += 300 * dt; // gravity on particles
+                    p.vx *= 0.98;
+                    p.life -= dt;
+                }
+                this.popParticles = this.popParticles.filter(p => p.life > 0);
+            }
+
+            draw() {
+                this.ctx.save();
+                // Screen shake offset
+                if (this.screenShake > 0) {
+                    const intensity = this.screenShake * 12;
+                    const sx = (Math.random() - 0.5) * intensity;
+                    const sy = (Math.random() - 0.5) * intensity;
+                    this.ctx.translate(sx, sy);
+                }
+
+                this.ctx.fillStyle = '#0d1117';
+                this.ctx.fillRect(-10, -10, CANVAS_WIDTH + 20, CANVAS_HEIGHT + 20);
+
+                this.ctx.strokeStyle = '#7c3aed';
+                this.ctx.lineWidth = 4;
+                this.ctx.strokeRect(BOX_X, BOX_Y, BOX_W, BOX_H);
+
+                this.ctx.setLineDash([8, 8]);
+                this.ctx.strokeStyle = 'rgba(239, 68, 68, 0.8)';
+                this.ctx.beginPath();
+                this.ctx.moveTo(BOX_X, BOX_Y + GAME_OVER_LINE);
+                this.ctx.lineTo(BOX_X + BOX_W, BOX_Y + GAME_OVER_LINE);
+                this.ctx.stroke();
+                this.ctx.setLineDash([]);
+
+                this.ctx.save();
+                this.ctx.beginPath();
+                this.ctx.rect(BOX_X, BOX_Y, BOX_W, BOX_H);
+                this.ctx.clip();
+
+                for (const b of this.balls) {
+                    const img = this.friendImages[b.friendType];
+                    if (img && img.complete) {
+                        this.ctx.save();
+                        this.ctx.beginPath();
+                        this.ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+                        this.ctx.closePath();
+                        this.ctx.clip();
+                        this.ctx.drawImage(img, b.x - b.radius, b.y - b.radius, b.radius * 2, b.radius * 2);
+                        this.ctx.restore();
+                    } else {
+                        this.ctx.fillStyle = '#a78bfa';
+                        this.ctx.beginPath();
+                        this.ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+                        this.ctx.fill();
+                    }
+                    this.ctx.strokeStyle = '#333';
+                    this.ctx.lineWidth = 2;
+                    this.ctx.stroke();
+                }
+
+                this.ctx.restore();
+
+                const previewR = radiusForFriend(this.nextFriendType);
+                const previewY = BOX_Y - previewR - 6;
+                const previewImg = this.friendImages[this.nextFriendType];
+                if (previewImg && previewImg.complete) {
+                    this.ctx.save();
+                    this.ctx.globalAlpha = this.dropTimer > 0 ? 0.4 : 0.85;
+                    this.ctx.beginPath();
+                    this.ctx.arc(this.dropperX, previewY, previewR, 0, Math.PI * 2);
+                    this.ctx.closePath();
+                    this.ctx.clip();
+                    this.ctx.drawImage(previewImg, this.dropperX - previewR, previewY - previewR, previewR * 2, previewR * 2);
+                    this.ctx.restore();
+                } else {
+                    this.ctx.fillStyle = '#a78bfa';
+                    this.ctx.globalAlpha = this.dropTimer > 0 ? 0.4 : 0.85;
+                    this.ctx.beginPath();
+                    this.ctx.arc(this.dropperX, previewY, previewR, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    this.ctx.globalAlpha = 1;
+                }
+                this.ctx.strokeStyle = '#7c3aed';
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.arc(this.dropperX, previewY, previewR, 0, Math.PI * 2);
+                this.ctx.stroke();
+
+                // Draw pop particles
+                for (const p of this.popParticles) {
+                    const alpha = Math.min(1, p.life / p.maxLife);
+                    this.ctx.globalAlpha = alpha;
+                    this.ctx.fillStyle = p.color;
+                    this.ctx.beginPath();
+                    this.ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+                    this.ctx.fill();
+                }
+                this.ctx.globalAlpha = 1;
+
+                // Screen flash overlay
+                if (this.screenFlash > 0) {
+                    this.ctx.fillStyle = `rgba(167, 139, 250, ${this.screenFlash * 0.6})`;
+                    this.ctx.fillRect(-10, -10, CANVAS_WIDTH + 20, CANVAS_HEIGHT + 20);
+                }
+
+                if (this.gameOver) {
+                    this.ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                    this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+                }
+
+                this.ctx.restore(); // end screen shake transform
+            }
+
+            start() {
+                document.getElementById('start-menu').classList.remove('active');
+                this.running = true;
+                this.balls = [];
+                this.score = 0;
+                this.gameOver = false;
+                this.timeLeft = GAME_TIME;
+                this.nextFriendType = Math.floor(Math.random() * MAX_SPAWN_TYPE);
+                document.getElementById('next-friend').textContent = FRIENDS[this.nextFriendType].name;
+                document.getElementById('score-val').textContent = '0';
+                this.lastTime = performance.now();
+                requestAnimationFrame(t => this.loop(t));
+            }
+
+            restart() {
+                // Keep score and time, just clear the board
+                document.getElementById('game-over-menu').classList.remove('active');
+                this.balls = [];
+                this.gameOver = false;
+                this.dropperX = BOX_X + BOX_W / 2;
+                this.dropTimer = 0;
+                this.nextFriendType = Math.floor(Math.random() * MAX_SPAWN_TYPE);
+                document.getElementById('next-friend').textContent = FRIENDS[this.nextFriendType].name;
+                document.getElementById('score-val').textContent = this.score;
+                this.lastTime = performance.now();
+                if (!this.running) {
+                    this.running = true;
+                    requestAnimationFrame(t => this.loop(t));
+                }
+            }
+
+            loop(currentTime) {
+                if (!this.running) return;
+                const dt = Math.min((currentTime - this.lastTime) / 1000, 0.05);
+                this.lastTime = currentTime;
+                this.update(dt);
+                this.updateEffects(dt);
+                this.draw();
+                requestAnimationFrame(t => this.loop(t));
+            }
+        }
+
+        const game = new Game();
+        window.game = game;
+    </script>
+</body>
+</html>
