@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Butter</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0a0a0a;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            touch-action: none;
+        }
+        #game-container {
+            position: relative;
+            width: 1280px;
+            height: 720px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        #ui-layer .menu {
+            pointer-events: auto;
+        }
+        .menu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 2rem;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            border: 2px solid #00f2ff;
+            box-shadow: 0 0 15px rgba(0, 242, 255, 0.3);
+        }
+        .menu.active {
+            display: block;
+        }
+        h1 {
+            color: #00f2ff;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin-bottom: 2rem;
+        }
+        .title-logo {
+            display: block;
+            max-width: 280px;
+            height: auto;
+            margin: 0 auto 1.5rem;
+        }
+        button {
+            background: #111;
+            color: #00f2ff;
+            border: 1px solid #00f2ff;
+            padding: 15px 30px;
+            margin: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        button:hover {
+            background: #00f2ff;
+            color: #000;
+            box-shadow: 0 0 10px #00f2ff;
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 1.25rem;
+            pointer-events: none;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            color: #00f2ff;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: #666;
+            font-size: 1rem;
+            letter-spacing: 1px;
+        }
+        .home-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: #111;
+            color: #00f2ff;
+            border: 1px solid #00f2ff;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            pointer-events: auto;
+            transition: all 0.2s;
+        }
+        .home-btn:hover {
+            background: #00f2ff;
+            color: #000;
+            box-shadow: 0 0 10px #00f2ff;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer">
+            <a href="../../index.html" class="home-btn">Home</a>
+            <div id="hud">Score: 0 &nbsp; Level: 1 &nbsp; Best: 0</div>
+            <div id="start-menu" class="menu active">
+                <img src="../../images/butter-title.png" alt="Butter" class="title-logo">
+                <button onclick="game.start()">Play</button>
+            </div>
+            <div id="gameover-menu" class="menu">
+                <h1>Game Over</h1>
+                <p id="gameover-score" style="color: #00f2ff; margin-bottom: 1rem;">Score: 0</p>
+                <button onclick="game.restart()">Play Again</button>
+            </div>
+            <div id="instructions">SPACE to jump &nbsp;|&nbsp; ARROWS left/right &nbsp;|&nbsp; Reach the goal pad!</div>
+        </div>
+    </div>
+
+    <script>
+        const STORAGE_KEY = 'butterBest';
+        const W = 1280;
+        const H = 720;
+        const PLAYER_SIZE = 40;
+        const GRAVITY = 700;
+        const JUMP_VEL = -420;
+        const MOVE_SPEED = 280;
+        const PAD_WIDTH = 100;
+        const PAD_HEIGHT = 28;
+        const PAD_ROWS = 6;
+        const ROW_GAP = (H - 120) / (PAD_ROWS + 1);
+
+        function getBest() {
+            const v = localStorage.getItem(STORAGE_KEY);
+            return v === null ? 0 : parseInt(v, 10);
+        }
+        function setBest(n) {
+            localStorage.setItem(STORAGE_KEY, String(n));
+        }
+
+        function checkRectCollision(r1, r2) {
+            return r1.x < r2.x + r2.w && r1.x + r1.w > r2.x &&
+                   r1.y < r2.y + r2.h && r1.y + r1.h > r2.y;
+        }
+
+        function createPads(level) {
+            const pads = [];
+            const baseSpeed = 45 + level * 12;
+            for (let r = 0; r < PAD_ROWS; r++) {
+                const y = 80 + ROW_GAP * (r + 1) - PAD_HEIGHT / 2;
+                const count = 3 + Math.min(level, 2);
+                const dir = r % 2 === 0 ? 1 : -1;
+                const speed = baseSpeed * dir;
+                const spacing = W / (count + 1);
+                for (let i = 0; i < count; i++) {
+                    const x = spacing * (i + 1) - PAD_WIDTH / 2 + (r % 2) * 40;
+                    pads.push({ x, y, w: PAD_WIDTH, h: PAD_HEIGHT, speed, dir, isGoal: false });
+                }
+            }
+            return pads;
+        }
+
+        class Renderer {
+            constructor(canvasId) {
+                this.canvas = document.getElementById(canvasId);
+                this.ctx = this.canvas.getContext('2d');
+                this.width = W;
+                this.height = H;
+                this.canvas.width = this.width;
+                this.canvas.height = this.height;
+                this.playerImg = new Image();
+                this.playerImg.src = '../../images/weston_profilke.png';
+            }
+
+            clear() {
+                this.ctx.fillStyle = '#0a0a0a';
+                this.ctx.fillRect(0, 0, this.width, this.height);
+            }
+
+            drawWater() {
+                const g = this.ctx.createLinearGradient(0, 0, 0, this.height);
+                g.addColorStop(0, '#0a3d62');
+                g.addColorStop(0.5, '#1a5f8a');
+                g.addColorStop(1, '#0d4d73');
+                this.ctx.fillStyle = g;
+                this.ctx.fillRect(0, 60, this.width, this.height - 60);
+                for (let i = 0; i < 30; i++) {
+                    this.ctx.fillStyle = `rgba(255,255,255,${0.03 + Math.random() * 0.04})`;
+                    this.ctx.fillRect(Math.random() * this.width, 80 + Math.random() * (this.height - 120), 4, 4);
+                }
+            }
+
+            drawStartPad() {
+                const y = H - 50;
+                this.ctx.fillStyle = '#2d5a27';
+                this.ctx.beginPath();
+                this.ctx.ellipse(W / 2, y, 120, 22, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.strokeStyle = '#3d7a37';
+                this.ctx.lineWidth = 3;
+                this.ctx.stroke();
+            }
+
+            drawGoalPad() {
+                const y = 35;
+                this.ctx.fillStyle = '#f4d03f';
+                this.ctx.shadowBlur = 20;
+                this.ctx.shadowColor = '#f9e79f';
+                this.ctx.beginPath();
+                this.ctx.ellipse(W / 2, y, 100, 20, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.shadowBlur = 0;
+                this.ctx.strokeStyle = '#e6b800';
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke();
+                this.ctx.fillStyle = '#333';
+                this.ctx.font = 'bold 14px sans-serif';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('GOAL', W / 2, y + 5);
+            }
+
+            drawLilyPad(x, y, w, h) {
+                this.ctx.fillStyle = '#2d5a27';
+                this.ctx.beginPath();
+                this.ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.strokeStyle = '#3d7a37';
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke();
+                this.ctx.fillStyle = '#1e4620';
+                this.ctx.beginPath();
+                this.ctx.arc(x + w / 2, y + h / 2, 6, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+
+            drawPlayer(px, py) {
+                this.ctx.shadowBlur = 14;
+                this.ctx.shadowColor = '#f4d03f';
+                if (this.playerImg.complete) {
+                    this.ctx.drawImage(this.playerImg, px, py, PLAYER_SIZE, PLAYER_SIZE);
+                } else {
+                    this.ctx.fillStyle = '#f4d03f';
+                    this.ctx.fillRect(px, py, PLAYER_SIZE, PLAYER_SIZE);
+                }
+                this.ctx.shadowBlur = 0;
+            }
+        }
+
+        class Game {
+            constructor() {
+                this.renderer = new Renderer('gameCanvas');
+                this.state = 'idle';
+                this.score = 0;
+                this.level = 1;
+                this.best = getBest();
+                this.pads = [];
+                this.goalRect = { x: W / 2 - 100, y: 15, w: 200, h: 40 };
+                this.player = {
+                    x: W / 2 - PLAYER_SIZE / 2,
+                    y: H - 50 - PLAYER_SIZE - 5,
+                    vx: 0,
+                    vy: 0,
+                    onPad: null
+                };
+                this.startPad = { x: W / 2 - 120, y: H - 72, w: 240, h: 44 };
+                this.lastTime = 0;
+                this.running = false;
+
+                window.addEventListener('keydown', (e) => {
+                    if (e.key === ' ') { e.preventDefault(); this.jump(); }
+                    if (e.key === 'ArrowLeft') { e.preventDefault(); this.moveLeft(); }
+                    if (e.key === 'ArrowRight') { e.preventDefault(); this.moveRight(); }
+                });
+                window.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    const x = e.touches[0].clientX;
+                    const rect = this.renderer.canvas.getBoundingClientRect();
+                    const relX = x - rect.left;
+                    const relW = rect.width;
+                    if (relX < relW / 3) this.moveLeft();
+                    else if (relX > (relW * 2) / 3) this.moveRight();
+                    else this.jump();
+                });
+            }
+
+            initLevel() {
+                this.pads = createPads(this.level);
+            }
+
+            jump() {
+                if (this.state !== 'playing') return;
+                if (this.state === 'gameover') { this.restart(); return; }
+                if (this.player.onPad !== null || this.onStartPad()) {
+                    this.player.vy = JUMP_VEL;
+                    this.player.onPad = null;
+                }
+            }
+
+            onStartPad() {
+                const p = this.player;
+                return p.y + PLAYER_SIZE >= this.startPad.y &&
+                       p.y <= this.startPad.y + this.startPad.h &&
+                       p.x + PLAYER_SIZE > this.startPad.x &&
+                       p.x < this.startPad.x + this.startPad.w &&
+                       p.vy >= 0;
+            }
+
+            moveLeft() {
+                if (this.state !== 'playing') return;
+                this.player.vx = -MOVE_SPEED;
+            }
+
+            moveRight() {
+                if (this.state !== 'playing') return;
+                this.player.vx = MOVE_SPEED;
+            }
+
+            start() {
+                document.getElementById('start-menu').classList.remove('active');
+                document.getElementById('gameover-menu').classList.remove('active');
+                this.state = 'playing';
+                this.score = 0;
+                this.level = 1;
+                this.initLevel();
+                this.player.x = W / 2 - PLAYER_SIZE / 2;
+                this.player.y = H - 50 - PLAYER_SIZE - 5;
+                this.player.vx = 0;
+                this.player.vy = 0;
+                this.player.onPad = null;
+                this.lastTime = performance.now();
+                this.running = true;
+                this.updateHud();
+                requestAnimationFrame((t) => this.loop(t));
+            }
+
+            restart() {
+                this.start();
+            }
+
+            loop(currentTime) {
+                if (!this.running) return;
+                const dt = Math.min((currentTime - this.lastTime) / 1000, 0.1);
+                this.lastTime = currentTime;
+                if (this.state === 'playing') this.update(dt);
+                this.draw();
+                requestAnimationFrame((t) => this.loop(t));
+            }
+
+            update(dt) {
+                const p = this.player;
+                p.vx *= 0.92;
+                p.vy += GRAVITY * dt;
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.x = Math.max(0, Math.min(W - PLAYER_SIZE, p.x));
+
+                for (const pad of this.pads) {
+                    pad.x += pad.speed * dt;
+                    if (pad.x + pad.w < 0) pad.x = W;
+                    if (pad.x > W) pad.x = -pad.w;
+                }
+
+                p.onPad = null;
+                if (p.vy >= 0) {
+                    if (this.onStartPad()) {
+                        p.vy = 0;
+                        p.y = this.startPad.y - PLAYER_SIZE + 2;
+                        p.onPad = 'start';
+                    }
+                    for (const pad of this.pads) {
+                        const pr = { x: p.x + 4, y: p.y + PLAYER_SIZE - 8, w: PLAYER_SIZE - 8, h: 10 };
+                        const padR = { x: pad.x + 4, y: pad.y + 4, w: pad.w - 8, h: pad.h - 8 };
+                        if (checkRectCollision(pr, padR) && p.vy >= 0) {
+                            p.vy = 0;
+                            p.y = pad.y - PLAYER_SIZE + 2;
+                            p.onPad = pad;
+                            p.x += pad.speed * dt;
+                        }
+                    }
+                }
+
+                const pr = { x: p.x, y: p.y, w: PLAYER_SIZE, h: PLAYER_SIZE };
+                if (checkRectCollision(pr, this.goalRect)) {
+                    this.score++;
+                    if (this.score > this.best) { this.best = this.score; setBest(this.best); }
+                    this.level++;
+                    this.initLevel();
+                    p.x = W / 2 - PLAYER_SIZE / 2;
+                    p.y = H - 50 - PLAYER_SIZE - 5;
+                    p.vx = 0; p.vy = 0; p.onPad = null;
+                }
+
+                if (p.y > H) this.die();
+            }
+
+            die() {
+                this.state = 'gameover';
+                document.getElementById('gameover-score').textContent = 'Score: ' + this.score;
+                document.getElementById('gameover-menu').classList.add('active');
+                this.updateHud();
+            }
+
+            updateHud() {
+                document.getElementById('hud').innerHTML =
+                    'Score: ' + this.score + ' &nbsp; Level: ' + this.level + ' &nbsp; Best: ' + this.best;
+            }
+
+            draw() {
+                this.renderer.clear();
+                this.renderer.drawWater();
+                this.renderer.drawGoalPad();
+                this.renderer.drawStartPad();
+                for (const pad of this.pads) {
+                    this.renderer.drawLilyPad(pad.x, pad.y, pad.w, pad.h);
+                }
+                this.renderer.drawPlayer(this.player.x, this.player.y);
+                if (this.state === 'gameover') {
+                    this.renderer.ctx.fillStyle = 'rgba(255, 0, 0, 0.25)';
+                    this.renderer.ctx.fillRect(0, 0, this.renderer.width, this.renderer.height);
+                    this.renderer.ctx.fillStyle = '#fff';
+                    this.renderer.ctx.font = 'bold 36px sans-serif';
+                    this.renderer.ctx.textAlign = 'center';
+                    this.renderer.ctx.fillText('SPACE or TAP to play again', this.renderer.width / 2, 380);
+                }
+                this.updateHud();
+            }
+        }
+
+        const game = new Game();
+        window.game = game;
+    </script>
+</body>
+</html>
