@@ -76,12 +76,30 @@
             pointer-events: none;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
         }
+        .home-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: #444;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 1rem;
+            pointer-events: auto;
+            transition: background 0.2s;
+        }
+        .home-btn:hover {
+            background: #666;
+        }
     </style>
 </head>
 <body>
     <div id="game-container">
         <canvas id="gameCanvas"></canvas>
         <div id="ui-layer">
+            <a href="../../index.html" class="home-btn">Home</a>
             <div id="hud">Level: 1</div>
             <div id="start-menu" class="menu active">
                 <h1>Jumpy Dash Pro</h1>

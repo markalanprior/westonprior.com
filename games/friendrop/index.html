@@ -107,12 +107,34 @@
             color: #666;
             font-size: 1rem;
         }
+        .home-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: #111;
+            color: #a78bfa;
+            border: 1px solid #7c3aed;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            pointer-events: auto;
+            transition: all 0.2s;
+        }
+        .home-btn:hover {
+            background: #7c3aed;
+            color: #fff;
+            box-shadow: 0 0 10px #7c3aed;
+        }
     </style>
 </head>
 <body>
     <div id="game-container">
         <canvas id="gameCanvas"></canvas>
         <div id="ui-layer">
+            <a href="../../index.html" class="home-btn">Home</a>
             <div id="hud">
                 <div class="stat-box">Score: <span id="score-val">0</span></div>
                 <div class="stat-box" id="timer-box"><span id="timer-val">5:00</span></div>

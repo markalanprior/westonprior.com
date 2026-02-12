@@ -58,6 +58,16 @@ body {
     border-color: #555;
 }
 
+.game-tile-pillar-rush {
+    border-color: #00f2ff;
+    box-shadow: 0 0 20px rgba(0, 242, 255, 0.15);
+}
+
+.game-tile-pillar-rush:hover {
+    border-color: #00f2ff;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 30px rgba(0, 242, 255, 0.35);
+}
+
 .game-tile-image {
     display: block;
     width: 100%;

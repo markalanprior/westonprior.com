@@ -126,12 +126,33 @@
             font-size: 0.9rem;
             color: #2ecc71;
         }
+        .home-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: #111;
+            color: #fff;
+            border: 1px solid #e74c3c;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            pointer-events: auto;
+            transition: all 0.2s;
+        }
+        .home-btn:hover {
+            background: #e74c3c;
+            box-shadow: 0 0 10px #e74c3c;
+        }
     </style>
 </head>
 <body>
     <div id="game-container">
         <canvas id="gameCanvas"></canvas>
         <div id="ui-layer">
+            <a href="../../index.html" class="home-btn">Home</a>
             <div id="hud">
                 <div class="stat-box">Health: <span id="health-val">20</span>/<span id="max-health-val">20</span></div>
                 <div class="stat-box">Round: <span id="round-val">1</span></div>
