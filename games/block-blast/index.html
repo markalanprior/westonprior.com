@@ -297,6 +297,32 @@
                 return null;
             }
 
+            function findNearestValidPlacement(x, y, piece) {
+                if (!piece) return null;
+                const oriented = getPieceWithRotation(piece, game.dragRotation);
+                const centerCol = (x - GRID_X) / CELL_SIZE;
+                const centerRow = (y - GRID_Y) / CELL_SIZE;
+                let best = null;
+                let bestDist = Infinity;
+                for (let r = 0; r < GRID_SIZE; r++) {
+                    for (let c = 0; c < GRID_SIZE; c++) {
+                        if (!canPlace(game.grid, oriented, r, c)) continue;
+                        const cellCenterR = r + 0.5;
+                        const cellCenterC = c + 0.5;
+                        const dist = (centerRow - cellCenterR) ** 2 + (centerCol - cellCenterC) ** 2;
+                        if (dist < bestDist) {
+                            bestDist = dist;
+                            best = { row: r, col: c };
+                        }
+                    }
+                }
+                return best;
+            }
+
+            function isOverGrid(x, y) {
+                return x >= GRID_X && x < GRID_X + GRID_PIXEL && y >= GRID_Y && y < GRID_Y + GRID_PIXEL;
+            }
+
             function getHandSlotIndex(x, y) {
                 if (y < HAND_Y || y >= HAND_Y + HAND_SIZE * (HAND_SLOT_SIZE + HAND_SLOT_GAP)) return -1;
                 const idx = Math.floor((y - HAND_Y) / (HAND_SLOT_SIZE + HAND_SLOT_GAP));
@@ -410,13 +436,20 @@
 
                 if (game.dragPiece && game.dragHandIndex >= 0) {
                     const oriented = getPieceWithRotation(game.dragPiece, game.dragRotation);
-                    const minR = oriented.cells.length ? Math.min(...oriented.cells.map(c => c[0])) : 0;
-                    const maxR = oriented.cells.length ? Math.max(...oriented.cells.map(c => c[0])) : 0;
-                    const minC = oriented.cells.length ? Math.min(...oriented.cells.map(c => c[1])) : 0;
-                    const maxC = oriented.cells.length ? Math.max(...oriented.cells.map(c => c[1])) : 0;
-                    const originX = game.dragX - (minC + maxC + 1) * CELL_SIZE / 2;
-                    const originY = game.dragY - (minR + maxR + 1) * CELL_SIZE / 2;
-                    drawPiece(ctx, oriented, originX, originY, CELL_SIZE, filledColor);
+                    const snap = isOverGrid(game.dragX, game.dragY) ? findNearestValidPlacement(game.dragX, game.dragY, game.dragPiece) : null;
+                    if (snap) {
+                        ctx.globalAlpha = 0.5;
+                        drawPiece(ctx, oriented, GRID_X + snap.col * CELL_SIZE, GRID_Y + snap.row * CELL_SIZE, CELL_SIZE, filledColor);
+                        ctx.globalAlpha = 1;
+                    } else {
+                        const minR = oriented.cells.length ? Math.min(...oriented.cells.map(c => c[0])) : 0;
+                        const maxR = oriented.cells.length ? Math.max(...oriented.cells.map(c => c[0])) : 0;
+                        const minC = oriented.cells.length ? Math.min(...oriented.cells.map(c => c[1])) : 0;
+                        const maxC = oriented.cells.length ? Math.max(...oriented.cells.map(c => c[1])) : 0;
+                        const originX = game.dragX - (minC + maxC + 1) * CELL_SIZE / 2;
+                        const originY = game.dragY - (minR + maxR + 1) * CELL_SIZE / 2;
+                        drawPiece(ctx, oriented, originX, originY, CELL_SIZE, filledColor);
+                    }
                 }
 
                 if (game.lineClearFlash > 0) {
@@ -507,7 +540,14 @@
                 const clientX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
                 const clientY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
                 const { x, y } = toCanvasCoords(clientX, clientY);
-                const cell = pixelToGrid(x, y);
+                let cell = pixelToGrid(x, y);
+                const oriented = getPieceWithRotation(game.dragPiece, game.dragRotation);
+                if (!cell || !canPlace(game.grid, oriented, cell.row, cell.col)) {
+                    if (isOverGrid(x, y) || (x >= GRID_X - CELL_SIZE && x < GRID_X + GRID_PIXEL + CELL_SIZE && y >= GRID_Y - CELL_SIZE && y < GRID_Y + GRID_PIXEL + CELL_SIZE)) {
+                        const snap = findNearestValidPlacement(x, y, game.dragPiece);
+                        if (snap) cell = snap;
+                    }
+                }
                 if (cell) tryPlaceAt(cell.row, cell.col);
                 game.dragPiece = null;
                 game.dragHandIndex = -1;
