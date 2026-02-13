@@ -172,6 +172,7 @@
         const FRICTION = 0.995;
 
         const FRIENDS = [
+            { name: 'Enric',   path: '../../images/enric.PNG',          baseRadius: 22 },
             { name: 'Callan',  path: '../../images/callan.PNG',         baseRadius: 25 },
             { name: 'Carter',  path: '../../images/carter.PNG',         baseRadius: 30 },
             { name: 'Chinmay', path: '../../images/chinmay.PNG',        baseRadius: 35 },
@@ -182,7 +183,7 @@
         ];
 
         const DROP_COOLDOWN = 0.5; // seconds between drops
-        const MAX_SPAWN_TYPE = 3;  // only drop Callan, Carter, Chinmay randomly
+        const MAX_SPAWN_TYPE = 4;  // only drop Enric, Callan, Carter, Chinmay randomly
         const GAME_TIME = 300;     // 5 minutes in seconds
 
         function radiusForFriend(friendType) {

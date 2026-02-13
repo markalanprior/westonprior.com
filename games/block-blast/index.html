@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Block Blast</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0a0a0a;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            touch-action: none;
+        }
+        #game-container {
+            position: relative;
+            width: 1280px;
+            height: 720px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            background-color: #1a1a1a;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        #ui-layer .menu, #ui-layer .home-btn {
+            pointer-events: auto;
+        }
+        .menu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 2rem;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            border: 2px solid #00f2ff;
+            box-shadow: 0 0 15px rgba(0, 242, 255, 0.3);
+            min-width: 300px;
+        }
+        .menu.active {
+            display: block;
+        }
+        h1 {
+            color: #00f2ff;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin-bottom: 1rem;
+        }
+        button {
+            background: #111;
+            color: #00f2ff;
+            border: 1px solid #00f2ff;
+            padding: 12px 24px;
+            margin: 8px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        button:hover {
+            background: #00f2ff;
+            color: #000;
+            box-shadow: 0 0 10px #00f2ff;
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 1.25rem;
+            color: #00f2ff;
+        }
+        .stat-box {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 15px;
+            border-radius: 5px;
+            border: 1px solid rgba(0, 242, 255, 0.4);
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: #666;
+            font-size: 0.95rem;
+        }
+        .home-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: #111;
+            color: #00f2ff;
+            border: 1px solid #00f2ff;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+        }
+        .home-btn:hover {
+            background: #00f2ff;
+            color: #000;
+            box-shadow: 0 0 10px #00f2ff;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer">
+            <a href="../../index.html" class="home-btn">Home</a>
+            <div id="hud">
+                <div class="stat-box">Score: <span id="score-val">0</span></div>
+                <div class="stat-box">Best: <span id="high-score-val">0</span></div>
+            </div>
+            <div id="start-menu" class="menu active">
+                <h1>Block Blast</h1>
+                <p>Place blocks on the 6×6 grid. Clear full rows and columns to score. R to rotate.</p>
+                <button onclick="game.start()">Start</button>
+            </div>
+            <div id="game-over-menu" class="menu">
+                <h1>Game Over</h1>
+                <p>Final Score: <span id="final-score">0</span></p>
+                <p style="color:#888;">High Score: <span id="final-high-score">0</span></p>
+                <button onclick="game.restart()">Try Again</button>
+            </div>
+            <div id="instructions">Drag pieces onto the grid &bull; R to rotate</div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const GRID_SIZE = 6;
+            const HAND_SIZE = 3;
+            const POINTS_PER_BLOCK = 10;
+            const POINTS_PER_LINE_CELL = 10;
+            const COMBO_MULTIPLIER = 1.5;
+
+            // Piece definitions: array of {r, c} offsets from top-left. All rotations generated at runtime.
+            const PIECE_DEFS = [
+                { name: 'single', cells: [[0, 0]] },
+                { name: '2-line', cells: [[0, 0], [0, 1]] },
+                { name: '3-line', cells: [[0, 0], [0, 1], [0, 2]] },
+                { name: 'L', cells: [[0, 0], [0, 1], [1, 0]] },
+                { name: 'square', cells: [[0, 0], [0, 1], [1, 0], [1, 1]] },
+                { name: 'T', cells: [[0, 0], [0, 1], [0, 2], [1, 1]] },
+                { name: 'Z', cells: [[0, 0], [0, 1], [1, 1], [1, 2]] },
+                { name: 'small-L', cells: [[0, 0], [1, 0], [1, 1]] }
+            ];
+
+            function rotateCells90(cells) {
+                const rotated = cells.map(([r, c]) => [c, -r]);
+                const minR = Math.min(...rotated.map(x => x[0]));
+                const minC = Math.min(...rotated.map(x => x[1]));
+                return rotated.map(([r, c]) => [r - minR, c - minC]).sort((a, b) => a[0] !== b[0] ? a[0] - b[0] : a[1] - b[1]);
+            }
+
+            function allRotations(cells) {
+                const seen = new Set();
+                const result = [];
+                let current = cells.map(c => [...c]).sort((a, b) => a[0] !== b[0] ? a[0] - b[0] : a[1] - b[1]);
+                for (let i = 0; i < 4; i++) {
+                    const key = current.map(c => c.join(',')).join('|');
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        result.push(current.map(c => [...c]));
+                    }
+                    current = rotateCells90(current);
+                }
+                return result;
+            }
+
+            const PIECES = [];
+            PIECE_DEFS.forEach(def => {
+                const rots = allRotations(def.cells);
+                rots.forEach(cells => PIECES.push({ name: def.name, cells }));
+            });
+
+            function randomPiece() {
+                return PIECES[Math.floor(Math.random() * PIECES.length)];
+            }
+
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const CANVAS_WIDTH = 1280;
+            const CANVAS_HEIGHT = 720;
+            canvas.width = CANVAS_WIDTH;
+            canvas.height = CANVAS_HEIGHT;
+
+            const GRID_X = 120;
+            const GRID_Y = 150;
+            const CELL_SIZE = Math.min(80, Math.floor((CANVAS_WIDTH - 400) / GRID_SIZE), Math.floor((CANVAS_HEIGHT - 300) / GRID_SIZE));
+            const GRID_PIXEL = GRID_SIZE * CELL_SIZE;
+
+            const HAND_X = GRID_X + GRID_PIXEL + 60;
+            const HAND_Y = 200;
+            const HAND_SLOT_SIZE = 4 * CELL_SIZE + 16;
+            const HAND_SLOT_GAP = 20;
+
+            function createGrid() {
+                return Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
+            }
+
+            function canPlace(grid, piece, anchorR, anchorC) {
+                for (const [dr, dc] of piece.cells) {
+                    const r = anchorR + dr;
+                    const c = anchorC + dc;
+                    if (r < 0 || r >= GRID_SIZE || c < 0 || c >= GRID_SIZE) return false;
+                    if (grid[r][c] !== 0) return false;
+                }
+                return true;
+            }
+
+            function placePiece(grid, piece, anchorR, anchorC) {
+                for (const [dr, dc] of piece.cells) {
+                    grid[anchorR + dr][anchorC + dc] = 1;
+                }
+            }
+
+            function getFullRows(grid) {
+                const rows = [];
+                for (let r = 0; r < GRID_SIZE; r++) {
+                    if (grid[r].every(v => v === 1)) rows.push(r);
+                }
+                return rows;
+            }
+
+            function getFullCols(grid) {
+                const cols = [];
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    let full = true;
+                    for (let r = 0; r < GRID_SIZE; r++) if (grid[r][c] !== 1) { full = false; break; }
+                    if (full) cols.push(c);
+                }
+                return cols;
+            }
+
+            function clearLines(grid) {
+                const fullRows = getFullRows(grid);
+                const fullCols = getFullCols(grid);
+                const totalCleared = fullRows.length * GRID_SIZE + fullCols.length * GRID_SIZE - fullRows.length * fullCols.length;
+                if (fullRows.length > 0 || fullCols.length > 0) {
+                    fullRows.forEach(r => { for (let c = 0; c < GRID_SIZE; c++) grid[r][c] = 0; });
+                    fullCols.forEach(c => { for (let r = 0; r < GRID_SIZE; r++) grid[r][c] = 0; });
+                    compactGrid(grid);
+                }
+                return { fullRows, fullCols, totalCleared };
+            }
+
+            function compactGrid(grid) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const col = [];
+                    for (let r = 0; r < GRID_SIZE; r++) if (grid[r][c] !== 0) col.push(1);
+                    const zeros = GRID_SIZE - col.length;
+                    for (let r = 0; r < zeros; r++) grid[r][c] = 0;
+                    for (let r = zeros; r < GRID_SIZE; r++) grid[r][c] = col[r - zeros];
+                }
+            }
+
+            function canPlaceAnywhere(grid, piece) {
+                for (let r = 0; r < GRID_SIZE; r++) {
+                    for (let c = 0; c < GRID_SIZE; c++) {
+                        if (canPlace(grid, piece, r, c)) return true;
+                    }
+                }
+                return false;
+            }
+
+            function pixelToGrid(x, y) {
+                const col = Math.floor((x - GRID_X) / CELL_SIZE);
+                const row = Math.floor((y - GRID_Y) / CELL_SIZE);
+                if (row >= 0 && row < GRID_SIZE && col >= 0 && col < GRID_SIZE) return { row, col };
+                return null;
+            }
+
+            function getHandSlotIndex(x, y) {
+                if (y < HAND_Y || y >= HAND_Y + HAND_SIZE * (HAND_SLOT_SIZE + HAND_SLOT_GAP)) return -1;
+                const idx = Math.floor((y - HAND_Y) / (HAND_SLOT_SIZE + HAND_SLOT_GAP));
+                if (idx < 0 || idx >= HAND_SIZE) return -1;
+                if (x < HAND_X || x >= HAND_X + HAND_SLOT_SIZE) return -1;
+                return idx;
+            }
+
+            const game = {
+                grid: createGrid(),
+                hand: [],
+                handRotations: [],
+                score: 0,
+                highScore: parseInt(localStorage.getItem('blockblast-highscore')) || 0,
+                running: false,
+                gameOver: false,
+                dragPiece: null,
+                dragRotation: 0,
+                dragHandIndex: -1,
+                dragX: 0,
+                dragY: 0,
+                lineClearFlash: 0,
+                lastTime: 0
+            };
+
+            function refillHand() {
+                while (game.hand.length < HAND_SIZE) {
+                    game.hand.push(randomPiece());
+                    game.handRotations.push(0);
+                }
+            }
+
+            function getPieceWithRotation(piece, rotIndex) {
+                const rots = allRotations(piece.cells);
+                const r = rotIndex % rots.length;
+                return { cells: rots[r] };
+            }
+
+            function drawBlock(ctx, x, y, size, color, glow) {
+                const pad = 2;
+                if (glow) {
+                    ctx.shadowBlur = 12;
+                    ctx.shadowColor = color;
+                }
+                ctx.fillStyle = color;
+                ctx.fillRect(x + pad, y + pad, size - pad * 2, size - pad * 2);
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(x + pad, y + pad, size - pad * 2, size - pad * 2);
+            }
+
+            function drawPiece(ctx, piece, originX, originY, cellSize, color) {
+                for (const [dr, dc] of piece.cells) {
+                    drawBlock(ctx, originX + dc * cellSize, originY + dr * cellSize, cellSize, color, false);
+                }
+            }
+
+            function draw() {
+                ctx.fillStyle = '#1a1a1a';
+                ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+                const accent = '#00f2ff';
+                const filledColor = '#0ea5e9';
+                const gridLine = 'rgba(0, 242, 255, 0.25)';
+
+                ctx.strokeStyle = gridLine;
+                ctx.lineWidth = 1;
+                for (let i = 0; i <= GRID_SIZE; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(GRID_X + i * CELL_SIZE, GRID_Y);
+                    ctx.lineTo(GRID_X + i * CELL_SIZE, GRID_Y + GRID_PIXEL);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(GRID_X, GRID_Y + i * CELL_SIZE);
+                    ctx.lineTo(GRID_X + GRID_PIXEL, GRID_Y + i * CELL_SIZE);
+                    ctx.stroke();
+                }
+                ctx.strokeStyle = accent;
+                ctx.lineWidth = 2;
+                ctx.strokeRect(GRID_X, GRID_Y, GRID_PIXEL, GRID_PIXEL);
+
+                for (let r = 0; r < GRID_SIZE; r++) {
+                    for (let c = 0; c < GRID_SIZE; c++) {
+                        if (game.grid[r][c] !== 0) {
+                            drawBlock(ctx, GRID_X + c * CELL_SIZE, GRID_Y + r * CELL_SIZE, CELL_SIZE, filledColor, game.lineClearFlash > 0);
+                        }
+                    }
+                }
+
+                ctx.fillStyle = 'rgba(0, 242, 255, 0.15)';
+                ctx.font = 'bold 14px sans-serif';
+                ctx.fillText('PIECES', HAND_X, HAND_Y - 10);
+
+                for (let i = 0; i < game.hand.length; i++) {
+                    const piece = game.hand[i];
+                    const rot = game.handRotations[i] || 0;
+                    const oriented = getPieceWithRotation(piece, rot);
+                    const slotY = HAND_Y + i * (HAND_SLOT_SIZE + HAND_SLOT_GAP);
+                    const rows = oriented.cells.length ? Math.max(...oriented.cells.map(c => c[0])) + 1 : 0;
+                    const cols = oriented.cells.length ? Math.max(...oriented.cells.map(c => c[1])) + 1 : 0;
+                    const originX = HAND_X + (HAND_SLOT_SIZE - cols * CELL_SIZE) / 2;
+                    const originY = slotY + (HAND_SLOT_SIZE - rows * CELL_SIZE) / 2;
+                    if (game.dragHandIndex === i && game.dragPiece) continue;
+                    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                    ctx.strokeStyle = accent;
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(HAND_X, slotY, HAND_SLOT_SIZE, HAND_SLOT_SIZE);
+                    drawPiece(ctx, oriented, originX, originY, CELL_SIZE, filledColor);
+                }
+
+                if (game.dragPiece && game.dragHandIndex >= 0) {
+                    const oriented = getPieceWithRotation(game.dragPiece, game.dragRotation);
+                    const minR = oriented.cells.length ? Math.min(...oriented.cells.map(c => c[0])) : 0;
+                    const maxR = oriented.cells.length ? Math.max(...oriented.cells.map(c => c[0])) : 0;
+                    const minC = oriented.cells.length ? Math.min(...oriented.cells.map(c => c[1])) : 0;
+                    const maxC = oriented.cells.length ? Math.max(...oriented.cells.map(c => c[1])) : 0;
+                    const originX = game.dragX - (minC + maxC + 1) * CELL_SIZE / 2;
+                    const originY = game.dragY - (minR + maxR + 1) * CELL_SIZE / 2;
+                    drawPiece(ctx, oriented, originX, originY, CELL_SIZE, filledColor);
+                }
+
+                if (game.lineClearFlash > 0) {
+                    ctx.fillStyle = `rgba(0, 242, 255, ${game.lineClearFlash * 0.2})`;
+                    ctx.fillRect(GRID_X, GRID_Y, GRID_PIXEL, GRID_PIXEL);
+                }
+
+                if (game.gameOver) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+                }
+
+                document.getElementById('score-val').textContent = game.score;
+                document.getElementById('high-score-val').textContent = game.highScore;
+            }
+
+            function tryPlaceAt(row, col) {
+                if (!game.dragPiece || game.dragHandIndex < 0 || game.gameOver) return false;
+                const oriented = getPieceWithRotation(game.dragPiece, game.dragRotation);
+                if (!canPlace(game.grid, oriented, row, col)) return false;
+
+                placePiece(game.grid, oriented, row, col);
+                game.score += game.dragPiece.cells.length * POINTS_PER_BLOCK;
+
+                const { fullRows, fullCols, totalCleared } = clearLines(game.grid);
+                if (totalCleared > 0) {
+                    const combo = (fullRows.length + fullCols.length) > 1 ? COMBO_MULTIPLIER : 1;
+                    game.score += Math.floor(totalCleared * POINTS_PER_LINE_CELL * combo);
+                    game.lineClearFlash = 1;
+                }
+
+                game.hand.splice(game.dragHandIndex, 1);
+                game.handRotations.splice(game.dragHandIndex, 1);
+                game.dragPiece = null;
+                game.dragHandIndex = -1;
+
+                refillHand();
+                if (game.hand.every((p, i) => !canPlaceAnywhere(game.grid, getPieceWithRotation(p, game.handRotations[i] || 0)))) {
+                    game.gameOver = true;
+                    if (game.score > game.highScore) {
+                        game.highScore = game.score;
+                        localStorage.setItem('blockblast-highscore', game.highScore);
+                    }
+                    document.getElementById('final-score').textContent = game.score;
+                    document.getElementById('final-high-score').textContent = game.highScore;
+                    document.getElementById('game-over-menu').classList.add('active');
+                }
+                return true;
+            }
+
+            function toCanvasCoords(clientX, clientY) {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                return {
+                    x: (clientX - rect.left) * scaleX,
+                    y: (clientY - rect.top) * scaleY
+                };
+            }
+
+            function onPointerDown(e) {
+                if (game.gameOver || !game.running) return;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                const { x, y } = toCanvasCoords(clientX, clientY);
+                const slotIdx = getHandSlotIndex(x, y);
+                if (slotIdx >= 0 && slotIdx < game.hand.length) {
+                    game.dragPiece = game.hand[slotIdx];
+                    game.dragRotation = game.handRotations[slotIdx] || 0;
+                    game.dragHandIndex = slotIdx;
+                    game.dragX = x;
+                    game.dragY = y;
+                }
+            }
+
+            function onPointerMove(e) {
+                if (game.dragPiece == null) return;
+                e.preventDefault();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                const { x, y } = toCanvasCoords(clientX, clientY);
+                game.dragX = x;
+                game.dragY = y;
+            }
+
+            function onPointerUp(e) {
+                if (game.dragPiece == null) return;
+                const clientX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
+                const clientY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+                const { x, y } = toCanvasCoords(clientX, clientY);
+                const cell = pixelToGrid(x, y);
+                if (cell) tryPlaceAt(cell.row, cell.col);
+                game.dragPiece = null;
+                game.dragHandIndex = -1;
+            }
+
+            canvas.addEventListener('mousedown', onPointerDown);
+            canvas.addEventListener('mousemove', onPointerMove);
+            canvas.addEventListener('mouseup', onPointerUp);
+            canvas.addEventListener('mouseleave', onPointerUp);
+            canvas.addEventListener('touchstart', onPointerDown, { passive: true });
+            canvas.addEventListener('touchmove', onPointerMove, { passive: false });
+            canvas.addEventListener('touchend', onPointerUp);
+            canvas.addEventListener('touchcancel', onPointerUp);
+
+            window.addEventListener('keydown', function(e) {
+                if (e.key === 'r' || e.key === 'R') {
+                    if (game.dragPiece != null && game.dragHandIndex >= 0) {
+                        game.dragRotation = (game.dragRotation + 1) % 4;
+                        e.preventDefault();
+                    } else if (game.running && !game.gameOver && game.hand.length > 0) {
+                        game.handRotations[0] = ((game.handRotations[0] || 0) + 1) % 4;
+                        e.preventDefault();
+                    }
+                }
+            });
+
+            function update(dt) {
+                if (game.lineClearFlash > 0) {
+                    game.lineClearFlash = Math.max(0, game.lineClearFlash - dt * 3);
+                }
+            }
+
+            function loop(now) {
+                if (!game.running) return;
+                const dt = Math.min((now - game.lastTime) / 1000, 0.1);
+                game.lastTime = now;
+                update(dt);
+                draw();
+                requestAnimationFrame(loop);
+            }
+
+            game.start = function() {
+                document.getElementById('start-menu').classList.remove('active');
+                game.grid = createGrid();
+                game.hand = [];
+                game.handRotations = [];
+                game.score = 0;
+                game.running = true;
+                game.gameOver = false;
+                game.dragPiece = null;
+                game.dragHandIndex = -1;
+                game.lineClearFlash = 0;
+                refillHand();
+                game.lastTime = performance.now();
+                document.getElementById('game-over-menu').classList.remove('active');
+                requestAnimationFrame(loop);
+            };
+
+            game.restart = function() {
+                document.getElementById('game-over-menu').classList.remove('active');
+                game.start();
+            };
+
+            window.game = game;
+        })();
+    </script>
+</body>
+</html>

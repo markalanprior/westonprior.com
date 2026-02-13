@@ -32,6 +32,17 @@ body {
     object-fit: cover;
     border-radius: 50%;
     margin: 0 auto 48px;
+    border: 3px solid transparent;
+    box-shadow: 0 0 24px rgba(0, 17, 255, 0.5), 0 0 48px rgba(0, 242, 255, 0.2),
+                inset 0 0 20px rgba(0, 17, 255, 0.15);
+    background: linear-gradient(#000, #000) padding-box,
+                linear-gradient(135deg, #0011ff, #00f2ff, #0011ff) border-box;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.profile-photo:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 32px rgba(0, 17, 255, 0.6), 0 0 64px rgba(0, 242, 255, 0.3);
 }
 
 .game-tiles {
