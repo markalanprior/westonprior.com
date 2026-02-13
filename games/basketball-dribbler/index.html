@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Basketball Dribbler</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0a0a0a;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            touch-action: none;
+        }
+        #game-container {
+            position: relative;
+            width: 1280px;
+            height: 720px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+        }
+        #ui-layer .menu, .home-btn, .ball-opt { pointer-events: auto; }
+        .menu {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 2rem;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            border: 2px solid #f97316;
+            box-shadow: 0 0 15px rgba(249, 115, 22, 0.3);
+        }
+        .menu.active { display: block; }
+        h1 {
+            color: #f97316;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin-bottom: 1.5rem;
+        }
+        button {
+            background: #111;
+            color: #f97316;
+            border: 1px solid #f97316;
+            padding: 15px 30px;
+            margin: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        button:hover {
+            background: #f97316;
+            color: #000;
+            box-shadow: 0 0 10px #f97316;
+        }
+        #hud {
+            position: absolute;
+            top: 20px; left: 20px;
+            font-size: 1.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            color: #f97316;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: #666;
+            font-size: 1rem;
+        }
+        .home-btn {
+            position: absolute;
+            top: 20px; right: 20px;
+            padding: 10px 20px;
+            background: #111;
+            color: #f97316;
+            border: 1px solid #f97316;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.2s;
+        }
+        .home-btn:hover {
+            background: #f97316;
+            color: #000;
+        }
+        .start-menu-content {
+            display: flex;
+            gap: 2rem;
+            align-items: flex-start;
+            justify-content: center;
+            flex-wrap: wrap;
+            max-width: 520px;
+        }
+        .how-to-play {
+            background: rgba(40, 30, 20, 0.9);
+            border: 1px solid #f97316;
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            text-align: left;
+            color: #aaa;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            min-width: 220px;
+        }
+        .how-to-play strong {
+            color: #f97316;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+        .play-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+        .ball-selector {
+            margin: 1rem 0;
+        }
+        .ball-selector-label {
+            color: #aaa;
+            font-size: 0.85rem;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+        .ball-options {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .ball-opt {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 2px solid #444;
+            overflow: hidden;
+            cursor: pointer;
+            padding: 0;
+            background: #222;
+            transition: all 0.2s;
+        }
+        .ball-opt:hover, .ball-opt.selected {
+            border-color: #f97316;
+            box-shadow: 0 0 8px rgba(249, 115, 22, 0.5);
+        }
+        .ball-opt img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer">
+            <a href="../../index.html" class="home-btn">Home</a>
+            <div id="hud">Level 1 &nbsp; Baskets: 0 &nbsp; Best: 0</div>
+            <div id="start-menu" class="menu active">
+                <h1>Basketball Dribbler</h1>
+                <p style="color:#aaa;margin-bottom:1rem;">Dribble past the defenders and shoot to score!</p>
+                <div class="ball-selector">
+                    <span class="ball-selector-label">Choose your ball:</span>
+                    <div class="ball-options" id="ball-options">
+                        <button class="ball-opt" data-ball="basketball" title="Basketball">🟠</button>
+                        <button class="ball-opt" data-ball="callan" title="Callan"><img src="../../images/callan.PNG" alt="Callan"></button>
+                        <button class="ball-opt" data-ball="carter" title="Carter"><img src="../../images/carter.PNG" alt="Carter"></button>
+                        <button class="ball-opt" data-ball="chinmay" title="Chinmay"><img src="../../images/chinmay.PNG" alt="Chinmay"></button>
+                        <button class="ball-opt" data-ball="cole" title="Cole"><img src="../../images/cole.PNG" alt="Cole"></button>
+                        <button class="ball-opt" data-ball="enric" title="Enric"><img src="../../images/enric.PNG" alt="Enric"></button>
+                        <button class="ball-opt" data-ball="vivaan" title="Vivaan"><img src="../../images/vivaan.PNG" alt="Vivaan"></button>
+                        <button class="ball-opt" data-ball="weston" title="Weston"><img src="../../images/weston_profilke.png" alt="Weston"></button>
+                    </div>
+                </div>
+                <div class="start-menu-content">
+                    <div class="play-section">
+                        <button onclick="game.start()">Play</button>
+                    </div>
+                    <div class="how-to-play">
+                        <strong>How to Play</strong>
+                        • ARROWS or WASD — Dribble the ball<br>
+                        • SPACE — Hold to aim, move mouse to aim<br>
+                        • SPACE again — Shoot!<br>
+                        • Avoid defenders and get the ball through the hoop!
+                    </div>
+                </div>
+            </div>
+            <div id="score-menu" class="menu">
+                <h1>Basket!</h1>
+                <p id="score-msg" style="color:#f97316;margin-bottom:1rem;">Baskets: 0</p>
+                <button onclick="game.nextRound()">Next Shot</button>
+            </div>
+            <div id="instructions">ARROWS/WASD to dribble &nbsp;|&nbsp; SPACE to aim, move mouse, SPACE again to shoot!</div>
+        </div>
+    </div>
+
+    <script>
+        const W = 1280, H = 720;
+        const BALL_R = 15;
+        const MOVE_SPEED = 260;
+        const SHOOT_POWER = 1100;
+        const GRAVITY = 1200;
+        const BACKBOARD_W = 120, BACKBOARD_H = 85;
+        const BACKBOARD_X = (W - BACKBOARD_W) / 2, BACKBOARD_Y = 25;
+        const HOOP_X = W / 2, HOOP_Y = 118;
+        const HOOP_R = 42;
+        const RIM_THICKNESS = 8;
+        const DEFENDER_W = 32, DEFENDER_H = 56;
+        const RIM_DEFENDER_W = 36, RIM_DEFENDER_H = 70;
+        const DEFENDER_SPEED = 70;
+        const MAX_LEVEL = 100;
+        const STORAGE_KEY = 'basketballDribblerBest';
+        const BALL_IMAGES = {
+            callan: '../../images/callan.PNG',
+            carter: '../../images/carter.PNG',
+            chinmay: '../../images/chinmay.PNG',
+            cole: '../../images/cole.PNG',
+            enric: '../../images/enric.PNG',
+            vivaan: '../../images/vivaan.PNG',
+            weston: '../../images/weston_profilke.png'
+        };
+
+        function getBest() {
+            const v = localStorage.getItem(STORAGE_KEY);
+            return v === null ? 0 : parseInt(v, 10);
+        }
+        function setBest(n) { localStorage.setItem(STORAGE_KEY, String(n)); }
+
+        function dist(x1, y1, x2, y2) {
+            return Math.hypot(x2 - x1, y2 - y1);
+        }
+        function circleRectCollision(cx, cy, cr, rx, ry, rw, rh) {
+            const nearestX = Math.max(rx, Math.min(cx, rx + rw));
+            const nearestY = Math.max(ry, Math.min(cy, ry + rh));
+            return dist(cx, cy, nearestX, nearestY) <= cr;
+        }
+        function circleCircleCollision(cx1, cy1, r1, cx2, cy2, r2) {
+            return dist(cx1, cy1, cx2, cy2) <= r1 + r2;
+        }
+
+        function drawDefender(ctx, x, y, w, h, isRimDefender = false) {
+            const headR = w * 0.4;
+            const torsoH = h * 0.55;
+            const torsoY = y + headR * 2;
+            ctx.save();
+            if (isRimDefender) {
+                ctx.fillStyle = '#c41e3a';
+                ctx.strokeStyle = '#8b0000';
+            } else {
+                ctx.fillStyle = '#1e3a8a';
+                ctx.strokeStyle = '#1e40af';
+            }
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(x + w / 2, y + headR, headR, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillRect(x + 2, torsoY, w - 4, torsoH);
+            ctx.strokeRect(x + 2, torsoY, w - 4, torsoH);
+            if (isRimDefender) {
+                ctx.fillStyle = '#f5deb3';
+                ctx.fillRect(x, torsoY + torsoH - 4, w, 6);
+            }
+            ctx.restore();
+        }
+
+        function createDefenders(level) {
+            const count = 5 + Math.min(Math.floor(level * 0.2), 20);
+            const positions = [];
+            const padding = 80;
+            const safeZoneTop = Math.max(80, 220 - (level / MAX_LEVEL) * 130);
+            const safeZoneLeft = padding;
+            const safeZoneRight = W - padding - DEFENDER_W;
+            const safeZoneBottom = H - padding - DEFENDER_H;
+            for (let i = 0; i < count; i++) {
+                let x, y;
+                let attempts = 0;
+                do {
+                    x = safeZoneLeft + Math.random() * (safeZoneRight - safeZoneLeft);
+                    y = safeZoneTop + Math.random() * (safeZoneBottom - safeZoneTop);
+                    const gap = Math.max(8, 24 - Math.floor((level / MAX_LEVEL) * 18));
+                    const overlap = positions.some(p =>
+                        Math.abs(p.x - x) < DEFENDER_W + gap && Math.abs(p.y - y) < DEFENDER_H + gap
+                    );
+                    if (!overlap) break;
+                    attempts++;
+                } while (attempts < 50);
+                positions.push({ x, y, vx: 0, vy: 0 });
+            }
+            return positions;
+        }
+
+        class Game {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.canvas.width = W;
+                this.canvas.height = H;
+                this.state = 'idle';
+                this.goals = 0;
+                this.best = getBest();
+                this.level = 1;
+                this.ball = { x: 0, y: 0, vx: 0, vy: 0 };
+                this.defenders = [];
+                this.rimDefender = {
+                    x: HOOP_X - RIM_DEFENDER_W / 2,
+                    y: BACKBOARD_Y + BACKBOARD_H - 10,
+                    dir: 1,
+                    speed: 95
+                };
+                this.running = false;
+                this.aiming = false;
+                this.mouseX = 0;
+                this.mouseY = 0;
+                this.shotInAir = false;
+                this.ballImage = null;
+                this.ballImageKey = localStorage.getItem('basketballDribblerBall') || 'basketball';
+
+                document.addEventListener('keydown', (e) => {
+                    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d',' '].includes(e.key))
+                        e.preventDefault();
+                    if (e.key === ' ' && this.state === 'playing' && !this.shotInAir) {
+                        if (this.aiming) {
+                            this.aiming = false;
+                            this.shoot();
+                        } else {
+                            this.aiming = true;
+                            this.mouseX = this.ball.x;
+                            this.mouseY = this.ball.y;
+                        }
+                    }
+                });
+                this.canvas.addEventListener('mousemove', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const scaleX = this.canvas.width / rect.width;
+                    const scaleY = this.canvas.height / rect.height;
+                    this.mouseX = (e.clientX - rect.left) * scaleX;
+                    this.mouseY = (e.clientY - rect.top) * scaleY;
+                });
+
+                this.loadBallImage();
+                document.querySelectorAll('.ball-opt').forEach(btn => {
+                    if (btn.dataset.ball === this.ballImageKey) btn.classList.add('selected');
+                    btn.addEventListener('click', () => {
+                        const key = btn.dataset.ball;
+                        this.ballImageKey = key;
+                        localStorage.setItem('basketballDribblerBall', key);
+                        this.loadBallImage();
+                        document.querySelectorAll('.ball-opt').forEach(b => b.classList.remove('selected'));
+                        btn.classList.add('selected');
+                    });
+                });
+            }
+
+            loadBallImage() {
+                if (this.ballImageKey === 'basketball') {
+                    this.ballImage = null;
+                    return;
+                }
+                const img = new Image();
+                img.onload = () => { this.ballImage = img; };
+                img.src = BALL_IMAGES[this.ballImageKey] || BALL_IMAGES.callan;
+            }
+
+            start() {
+                document.getElementById('start-menu').classList.remove('active');
+                document.getElementById('score-menu').classList.remove('active');
+                this.state = 'playing';
+                this.goals = 0;
+                this.level = 1;
+                this.initRound();
+                this.running = true;
+                this.updateHud();
+                requestAnimationFrame((t) => this.loop(t));
+            }
+
+            initRound() {
+                this.ball.x = W / 2 - BALL_R;
+                this.ball.y = H - 120;
+                this.ball.vx = 0;
+                this.ball.vy = 0;
+                this.shotInAir = false;
+                this.defenders = createDefenders(this.level);
+                const span = BACKBOARD_W - RIM_DEFENDER_W - 20;
+                this.rimDefender.x = BACKBOARD_X + 10 + span / 2 - RIM_DEFENDER_W / 2;
+                this.rimDefender.dir = 1;
+                this.rimDefender.speed = 95 + this.level * 15 + 20 * Math.sqrt(this.level);
+            }
+
+            nextRound() {
+                document.getElementById('score-menu').classList.remove('active');
+                this.goals++;
+                if (this.goals > this.best) { this.best = this.goals; setBest(this.best); }
+                this.level++;
+                this.state = 'playing';
+                this.aiming = false;
+                this.initRound();
+                this.updateHud();
+            }
+
+            shoot() {
+                const b = this.ball;
+                const dx = this.mouseX - b.x;
+                const dy = this.mouseY - b.y;
+                const len = Math.hypot(dx, dy) || 1;
+                b.vx = (dx / len) * SHOOT_POWER;
+                b.vy = (dy / len) * SHOOT_POWER;
+                this.shotInAir = true;
+            }
+
+            ballInHoop() {
+                const b = this.ball;
+                const d = dist(b.x, b.y, HOOP_X, HOOP_Y);
+                const inOpening = d < HOOP_R - BALL_R;
+                const inVerticalSlice = b.y >= HOOP_Y - 15 && b.y <= HOOP_Y + 25;
+                const goingDown = b.vy > 0;
+                return inOpening && inVerticalSlice && goingDown;
+            }
+
+            loop(currentTime) {
+                if (!this.running) return;
+                const dt = Math.min(1/60, 0.02);
+                if (this.state === 'playing') this.update(dt);
+                this.draw();
+                requestAnimationFrame((t) => this.loop(t));
+            }
+
+            update(dt) {
+                const span = BACKBOARD_W - RIM_DEFENDER_W - 20;
+                const rimLeft = BACKBOARD_X + 10;
+                this.rimDefender.x += this.rimDefender.dir * this.rimDefender.speed * dt;
+                if (this.rimDefender.x <= rimLeft) {
+                    this.rimDefender.x = rimLeft;
+                    this.rimDefender.dir = 1;
+                } else if (this.rimDefender.x >= rimLeft + span) {
+                    this.rimDefender.x = rimLeft + span;
+                    this.rimDefender.dir = -1;
+                }
+
+                const b = this.ball;
+
+                if (this.shotInAir) {
+                    b.vy += GRAVITY * dt;
+                } else {
+                    let dx = 0, dy = 0;
+                    if (this.keys) {
+                        if (this.keys.ArrowUp || this.keys.w) dy -= 1;
+                        if (this.keys.ArrowDown || this.keys.s) dy += 1;
+                        if (this.keys.ArrowLeft || this.keys.a) dx -= 1;
+                        if (this.keys.ArrowRight || this.keys.d) dx += 1;
+                    }
+                    if (dx !== 0 || dy !== 0) {
+                        const len = Math.hypot(dx, dy);
+                        b.vx += (dx / len) * MOVE_SPEED * dt * 2.5;
+                        b.vy += (dy / len) * MOVE_SPEED * dt * 2.5;
+                    }
+                    b.vx *= 0.86;
+                    b.vy *= 0.86;
+                }
+
+                b.x += b.vx * dt;
+                b.y += b.vy * dt;
+                b.x = Math.max(BALL_R, Math.min(W - BALL_R, b.x));
+                b.y = Math.max(BALL_R, Math.min(H - BALL_R, b.y));
+
+                if (b.y >= H - BALL_R - 2 && b.vy > 0) {
+                    b.vy = -b.vy * 0.5;
+                    b.y = H - BALL_R - 2;
+                    if (Math.abs(b.vy) < 80) this.shotInAir = false;
+                }
+
+                for (const d of this.defenders) {
+                    const toBallX = b.x - (d.x + DEFENDER_W / 2);
+                    const toBallY = b.y - (d.y + DEFENDER_H / 2);
+                    const len = Math.hypot(toBallX, toBallY) || 1;
+                    d.vx = (toBallX / len) * DEFENDER_SPEED * (1 + (this.level / MAX_LEVEL) * 1.5);
+                    d.vy = (toBallY / len) * DEFENDER_SPEED * (1 + (this.level / MAX_LEVEL) * 1.5);
+                    d.x += d.vx * dt;
+                    d.y += d.vy * dt;
+                    d.x = Math.max(60, Math.min(W - 60 - DEFENDER_W, d.x));
+                    d.y = Math.max(60, Math.min(H - 60 - DEFENDER_H, d.y));
+                }
+
+                for (const d of this.defenders) {
+                    if (circleRectCollision(b.x, b.y, BALL_R, d.x, d.y, DEFENDER_W, DEFENDER_H)) {
+                        const nx = (b.x - (d.x + DEFENDER_W/2)) / (DEFENDER_W/2 + BALL_R);
+                        const ny = (b.y - (d.y + DEFENDER_H/2)) / (DEFENDER_H/2 + BALL_R);
+                        const nlen = Math.hypot(nx, ny) || 1;
+                        b.vx = (nx / nlen) * 50;
+                        b.vy = (ny / nlen) * 50;
+                        b.x += (nx / nlen) * 4;
+                        b.y += (ny / nlen) * 4;
+                    }
+                }
+
+                if (circleRectCollision(b.x, b.y, BALL_R, this.rimDefender.x, this.rimDefender.y, RIM_DEFENDER_W, RIM_DEFENDER_H)) {
+                    const cx = this.rimDefender.x + RIM_DEFENDER_W/2, cy = this.rimDefender.y + RIM_DEFENDER_H/2;
+                    const nx = (b.x - cx) / (RIM_DEFENDER_W/2 + BALL_R);
+                    const ny = (b.y - cy) / (RIM_DEFENDER_H/2 + BALL_R);
+                    const nlen = Math.hypot(nx, ny) || 1;
+                    b.vx = (nx / nlen) * 35;
+                    b.vy = (ny / nlen) * 35;
+                    b.x += (nx / nlen) * 5;
+                    b.y += (ny / nlen) * 5;
+                    this.shotInAir = false;
+                }
+
+                if (circleRectCollision(b.x, b.y, BALL_R, BACKBOARD_X, BACKBOARD_Y, BACKBOARD_W, BACKBOARD_H)) {
+                    const nearestX = Math.max(BACKBOARD_X, Math.min(b.x, BACKBOARD_X + BACKBOARD_W));
+                    const nearestY = Math.max(BACKBOARD_Y, Math.min(b.y, BACKBOARD_Y + BACKBOARD_H));
+                    const nx = (b.x - nearestX) / (BACKBOARD_W/2 + BALL_R);
+                    const ny = (b.y - nearestY) / (BACKBOARD_H/2 + BALL_R);
+                    const nlen = Math.hypot(nx, ny) || 1;
+                    b.vx = (nx / nlen) * 60;
+                    b.vy = (ny / nlen) * 60;
+                    b.x += (nx / nlen) * 5;
+                    b.y += (ny / nlen) * 5;
+                }
+
+                const rimDist = dist(b.x, b.y, HOOP_X, HOOP_Y);
+                if (rimDist >= HOOP_R - BALL_R && rimDist <= HOOP_R + RIM_THICKNESS + BALL_R && b.y > HOOP_Y - 20 && b.y < HOOP_Y + 30) {
+                    const nx = (b.x - HOOP_X) / rimDist;
+                    const ny = (b.y - HOOP_Y) / rimDist;
+                    b.vx = nx * 55;
+                    b.vy = ny * 55;
+                    b.x += nx * 5;
+                    b.y += ny * 5;
+                }
+
+                if (this.ballInHoop()) {
+                    this.state = 'scored';
+                    document.getElementById('score-msg').textContent = 'Baskets: ' + (this.goals + 1);
+                    document.getElementById('score-menu').classList.add('active');
+                    return;
+                }
+
+                if (b.y < BALL_R && b.vy < 0) {
+                    b.vy = -b.vy * 0.5;
+                    b.y = BALL_R + 2;
+                }
+            }
+
+            updateHud() {
+                document.getElementById('hud').innerHTML = 'Level ' + this.level + ' &nbsp; Baskets: ' + this.goals + ' &nbsp; Best: ' + this.best;
+            }
+
+            draw() {
+                const ctx = this.ctx;
+                const g = ctx.createLinearGradient(0, 0, 0, H);
+                g.addColorStop(0, '#8b6914');
+                g.addColorStop(0.5, '#c9a227');
+                g.addColorStop(1, '#8b6914');
+                ctx.fillStyle = g;
+                ctx.fillRect(0, 0, W, H);
+
+                ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(60, 60, W - 120, H - 120);
+                ctx.beginPath();
+                ctx.moveTo(W/2, 60);
+                ctx.lineTo(W/2, H - 60);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(W/2, H/2, 80, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.fillStyle = '#1a1a1a';
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 3;
+                ctx.fillRect(BACKBOARD_X - 2, BACKBOARD_Y - 2, BACKBOARD_W + 4, BACKBOARD_H + 4);
+                ctx.strokeRect(BACKBOARD_X, BACKBOARD_Y, BACKBOARD_W, BACKBOARD_H);
+                ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                ctx.fillRect(BACKBOARD_X + 4, BACKBOARD_Y + 4, BACKBOARD_W - 8, BACKBOARD_H - 8);
+
+                ctx.strokeStyle = '#c41e3a';
+                ctx.lineWidth = 6;
+                ctx.beginPath();
+                ctx.arc(HOOP_X, HOOP_Y, HOOP_R + RIM_THICKNESS, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.arc(HOOP_X, HOOP_Y, HOOP_R, 0, Math.PI * 2);
+                ctx.stroke();
+
+                for (const d of this.defenders) {
+                    drawDefender(ctx, d.x, d.y, DEFENDER_W, DEFENDER_H, false);
+                }
+                drawDefender(ctx, this.rimDefender.x, this.rimDefender.y, RIM_DEFENDER_W, RIM_DEFENDER_H, true);
+
+                if (this.aiming) {
+                    ctx.strokeStyle = '#f97316';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([8, 6]);
+                    ctx.beginPath();
+                    ctx.moveTo(this.ball.x, this.ball.y);
+                    ctx.lineTo(this.mouseX, this.mouseY);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.beginPath();
+                    ctx.arc(this.mouseX, this.mouseY, 8, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#fff';
+                    ctx.stroke();
+                    ctx.fillStyle = 'rgba(249, 115, 22, 0.5)';
+                    ctx.fill();
+                }
+
+                const bx = this.ball.x, by = this.ball.y;
+                if (this.ballImage && this.ballImage.complete && this.ballImage.naturalWidth) {
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(bx, by, BALL_R, 0, Math.PI * 2);
+                    ctx.closePath();
+                    ctx.clip();
+                    ctx.drawImage(this.ballImage, 0, 0, this.ballImage.naturalWidth, this.ballImage.naturalHeight, bx - BALL_R, by - BALL_R, BALL_R * 2, BALL_R * 2);
+                    ctx.restore();
+                } else {
+                    ctx.fillStyle = '#e85d04';
+                    ctx.beginPath();
+                    ctx.arc(bx, by, BALL_R, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#333';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(bx, by, BALL_R, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                this.updateHud();
+            }
+        }
+
+        const game = new Game();
+        game.keys = {};
+        document.addEventListener('keydown', (e) => {
+            game.keys[e.key] = true;
+        });
+        document.addEventListener('keyup', (e) => {
+            game.keys[e.key] = false;
+        });
+
+        game.canvas.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+        window.game = game;
+    </script>
+</body>
+</html>
