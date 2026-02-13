@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cheese on Tortilla</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            touch-action: none;
+        }
+        #game-container {
+            position: relative;
+            width: 1280px;
+            height: 720px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            background-color: #0d1117;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        #ui-layer .menu, #ui-layer .home-btn {
+            pointer-events: auto;
+        }
+        .menu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 2rem;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            border: 2px solid #eab308;
+            box-shadow: 0 0 15px rgba(234, 179, 8, 0.3);
+            min-width: 300px;
+        }
+        .menu.active {
+            display: block;
+        }
+        h1 {
+            color: #facc15;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin-bottom: 1rem;
+        }
+        button {
+            background: #111;
+            color: #facc15;
+            border: 1px solid #eab308;
+            padding: 12px 24px;
+            margin: 8px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        button:hover {
+            background: #eab308;
+            color: #000;
+            box-shadow: 0 0 10px #eab308;
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 1.25rem;
+            color: #facc15;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+        .stat-box {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 15px;
+            border-radius: 5px;
+            border: 1px solid rgba(234, 179, 8, 0.4);
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: #666;
+            font-size: 1rem;
+        }
+        .home-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: #111;
+            color: #facc15;
+            border: 1px solid #eab308;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+        }
+        .home-btn:hover {
+            background: #eab308;
+            color: #000;
+            box-shadow: 0 0 10px #eab308;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer">
+            <a href="../../index.html" class="home-btn">Home</a>
+            <div id="hud">
+                <div class="stat-box">Level: <span id="level-val">1</span></div>
+                <div class="stat-box" id="timer-box">Time: <span id="timer-val">1:00</span></div>
+                <div class="stat-box">Cheese: <span id="cheese-val">0/50</span></div>
+            </div>
+            <div id="start-menu" class="menu active">
+                <h1>Cheese on Tortilla</h1>
+                <p>Put all the cheese on the tortilla before time runs out! The tortilla moves fast—time your drops.</p>
+                <button onclick="game.start()">Start</button>
+            </div>
+            <div id="level-complete-menu" class="menu">
+                <h1>Level Complete!</h1>
+                <p>Next level is harder.</p>
+                <button onclick="game.nextLevel()">Next Level</button>
+            </div>
+            <div id="game-over-menu" class="menu">
+                <h1 id="game-over-title">Time's Up!</h1>
+                <p>You reached Level <span id="final-level">1</span>.</p>
+                <button onclick="game.restart()">Try Again</button>
+            </div>
+            <div id="instructions">Arrow keys: move dropper &bull; Space: drop cheese</div>
+        </div>
+    </div>
+
+    <script>
+        const CANVAS_WIDTH = 1280;
+        const CANVAS_HEIGHT = 720;
+        const GRAVITY = 900;
+        const DROPPER_SPEED = 400;
+        const LEVEL_TIME = 60;
+        const DROP_COOLDOWN = 0.25;
+        const CHEESE_RADIUS = 18;
+        const MARGIN = 80;
+        const TORTILLA_BASE_WIDTH = 400;
+        const TORTILLA_HEIGHT = 24;
+        const TORTILLA_Y = CANVAS_HEIGHT - 120;
+        const REQUIRE_PCT = 0.75;
+
+        function levelParams(level) {
+            const speed = 200 + level * 80;
+            const cheeseCount = 50 + (level - 1) * 5;
+            const widthPct = Math.max(0.5, 1 - level * 0.03);
+            const width = Math.max(120, TORTILLA_BASE_WIDTH * widthPct);
+            return { speed, cheeseCount, width };
+        }
+
+        class Cheese {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = 0;
+                this.vy = 0;
+                this.radius = CHEESE_RADIUS;
+                this.onTortilla = false;
+                this.tortillaOffsetX = 0;
+            }
+        }
+
+        class Game {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.canvas.width = CANVAS_WIDTH;
+                this.canvas.height = CANVAS_HEIGHT;
+
+                this.level = 1;
+                this.timeLeft = LEVEL_TIME;
+                this.cheeseToPlace = 50;
+                this.cheeseLanded = 0;
+                this.cheesePieces = [];
+                this.dropperX = CANVAS_WIDTH / 2;
+                this.dropTimer = 0;
+                this.running = false;
+                this.gameOver = false;
+                this.keys = { left: false, right: false };
+
+                this.tortilla = {
+                    x: CANVAS_WIDTH / 2,
+                    y: TORTILLA_Y,
+                    width: TORTILLA_BASE_WIDTH,
+                    height: TORTILLA_HEIGHT,
+                    vx: 200,
+                    leftLimit: MARGIN,
+                    rightLimit: CANVAS_WIDTH - MARGIN
+                };
+
+                window.addEventListener('keydown', e => {
+                    if (e.key === 'ArrowLeft') this.keys.left = true;
+                    if (e.key === 'ArrowRight') this.keys.right = true;
+                    if (e.key === ' ') {
+                        e.preventDefault();
+                        if (this.running && this.dropTimer <= 0 && !this.gameOver && this.cheesePieces.length < this.cheeseToPlace) {
+                            this.dropCheese();
+                        }
+                    }
+                });
+                window.addEventListener('keyup', e => {
+                    if (e.key === 'ArrowLeft') this.keys.left = false;
+                    if (e.key === 'ArrowRight') this.keys.right = false;
+                });
+            }
+
+            resetLevel() {
+                const params = levelParams(this.level);
+                this.timeLeft = LEVEL_TIME;
+                this.cheeseToPlace = params.cheeseCount;
+                this.cheeseLanded = 0;
+                this.cheesePieces = [];
+                this.dropTimer = 0;
+                this.tortilla.vx = params.speed * (Math.random() > 0.5 ? 1 : -1);
+                this.tortilla.width = params.width;
+                this.tortilla.x = (this.tortilla.leftLimit + this.tortilla.rightLimit) / 2;
+            }
+
+            dropCheese() {
+                const x = Math.max(MARGIN + CHEESE_RADIUS, Math.min(CANVAS_WIDTH - MARGIN - CHEESE_RADIUS, this.dropperX));
+                this.cheesePieces.push(new Cheese(x, 50));
+                this.dropTimer = DROP_COOLDOWN;
+            }
+
+            update(dt) {
+                if (this.gameOver) return;
+
+                this.timeLeft -= dt;
+                if (this.timeLeft <= 0) {
+                    this.timeLeft = 0;
+                    this.endGame();
+                    return;
+                }
+
+                this.dropperX += (this.keys.right ? DROPPER_SPEED : 0) * dt;
+                this.dropperX -= (this.keys.left ? DROPPER_SPEED : 0) * dt;
+                this.dropperX = Math.max(MARGIN + 20, Math.min(CANVAS_WIDTH - MARGIN - 20, this.dropperX));
+
+                if (this.dropTimer > 0) this.dropTimer -= dt;
+
+                this.tortilla.x += this.tortilla.vx * dt;
+                if (this.tortilla.x - this.tortilla.width / 2 <= this.tortilla.leftLimit) {
+                    this.tortilla.x = this.tortilla.leftLimit + this.tortilla.width / 2;
+                    this.tortilla.vx = Math.abs(this.tortilla.vx);
+                }
+                if (this.tortilla.x + this.tortilla.width / 2 >= this.tortilla.rightLimit) {
+                    this.tortilla.x = this.tortilla.rightLimit - this.tortilla.width / 2;
+                    this.tortilla.vx = -Math.abs(this.tortilla.vx);
+                }
+
+                for (const c of this.cheesePieces) {
+                    if (c.onTortilla) {
+                        c.x = this.tortilla.x + c.tortillaOffsetX;
+                        continue;
+                    }
+                    c.vy += GRAVITY * dt;
+                    c.x += c.vx * dt;
+                    c.y += c.vy * dt;
+
+                    const tortillaLeft = this.tortilla.x - this.tortilla.width / 2;
+                    const tortillaRight = this.tortilla.x + this.tortilla.width / 2;
+                    const tortillaTop = this.tortilla.y - this.tortilla.height / 2;
+                    const cheeseBottom = c.y + c.radius;
+                    const cheeseCenterX = c.x;
+
+                    if (c.vy > 0 && cheeseBottom >= tortillaTop - 2 && cheeseBottom <= tortillaTop + this.tortilla.height + 10 &&
+                        cheeseCenterX >= tortillaLeft - c.radius && cheeseCenterX <= tortillaRight + c.radius) {
+                        c.onTortilla = true;
+                        c.tortillaOffsetX = c.x - this.tortilla.x;
+                        c.y = tortillaTop - c.radius;
+                        c.vy = 0;
+                        c.vx = 0;
+                    }
+
+                    if (c.y > CANVAS_HEIGHT + c.radius * 2) {
+                        c.onTortilla = false;
+                    }
+                }
+
+                this.cheeseLanded = this.cheesePieces.filter(c => c.onTortilla).length;
+                const allDropped = this.cheesePieces.length >= this.cheeseToPlace;
+                const required = Math.ceil(this.cheeseToPlace * REQUIRE_PCT);
+                if (allDropped && this.cheeseLanded >= required) {
+                    this.levelComplete();
+                } else if (allDropped && this.cheeseLanded < required) {
+                    this.endGame('outOfCheese');
+                }
+
+                document.getElementById('level-val').textContent = this.level;
+                const mins = Math.floor(this.timeLeft / 60);
+                const secs = Math.floor(this.timeLeft % 60);
+                document.getElementById('timer-val').textContent = mins + ':' + (secs < 10 ? '0' : '') + secs;
+                document.getElementById('cheese-val').textContent = this.cheeseLanded + '/' + this.cheeseToPlace + ' (need ' + required + ')';
+                if (this.timeLeft < 15) {
+                    document.getElementById('timer-box').style.color = '#ef4444';
+                    document.getElementById('timer-box').style.borderColor = '#ef4444';
+                } else {
+                    document.getElementById('timer-box').style.color = '';
+                    document.getElementById('timer-box').style.borderColor = '';
+                }
+            }
+
+            levelComplete() {
+                this.gameOver = true;
+                document.getElementById('level-complete-menu').classList.add('active');
+            }
+
+            nextLevel() {
+                document.getElementById('level-complete-menu').classList.remove('active');
+                this.level++;
+                this.gameOver = false;
+                this.resetLevel();
+                this.lastTime = performance.now();
+            }
+
+            endGame(reason) {
+                this.gameOver = true;
+                document.getElementById('game-over-title').textContent =
+                    reason === 'outOfCheese' ? "You used all your cheese balls." : "Time's Up!";
+                document.getElementById('final-level').textContent = this.level;
+                document.getElementById('game-over-menu').classList.add('active');
+            }
+
+            draw() {
+                this.ctx.fillStyle = '#0d1117';
+                this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+                this.ctx.fillStyle = '#d4a574';
+                this.ctx.strokeStyle = '#b8864a';
+                this.ctx.lineWidth = 3;
+                const tx = this.tortilla.x;
+                const ty = this.tortilla.y;
+                const tw = this.tortilla.width;
+                const th = this.tortilla.height;
+                this.ctx.beginPath();
+                this.ctx.ellipse(tx, ty, tw / 2, th / 2, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.stroke();
+
+                for (const c of this.cheesePieces) {
+                    if (c.onTortilla) {
+                        this.ctx.save();
+                        this.ctx.translate(c.x, c.y);
+                        this.ctx.fillStyle = '#facc15';
+                        this.ctx.strokeStyle = '#ca8a04';
+                        this.ctx.lineWidth = 2;
+                        this.ctx.beginPath();
+                        this.ctx.arc(0, 0, c.radius, 0, Math.PI * 2);
+                        this.ctx.fill();
+                        this.ctx.stroke();
+                        this.ctx.restore();
+                    } else {
+                        this.ctx.fillStyle = '#fde047';
+                        this.ctx.strokeStyle = '#ca8a04';
+                        this.ctx.lineWidth = 2;
+                        this.ctx.beginPath();
+                        this.ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2);
+                        this.ctx.fill();
+                        this.ctx.stroke();
+                    }
+                }
+
+                const nextY = 50 - CHEESE_RADIUS - 6;
+                const canDrop = this.running && !this.gameOver && this.cheesePieces.length < this.cheeseToPlace && this.dropTimer <= 0;
+                this.ctx.globalAlpha = canDrop ? 0.9 : 0.4;
+                this.ctx.fillStyle = '#fde047';
+                this.ctx.strokeStyle = '#eab308';
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.arc(this.dropperX, nextY, CHEESE_RADIUS, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.stroke();
+                this.ctx.globalAlpha = 1;
+
+                if (this.gameOver) {
+                    this.ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                    this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+                }
+            }
+
+            start() {
+                document.getElementById('start-menu').classList.remove('active');
+                this.level = 1;
+                this.gameOver = false;
+                this.resetLevel();
+                this.running = true;
+                this.lastTime = performance.now();
+                requestAnimationFrame(t => this.loop(t));
+            }
+
+            restart() {
+                document.getElementById('game-over-menu').classList.remove('active');
+                this.level = 1;
+                this.gameOver = false;
+                this.running = true;
+                this.resetLevel();
+                this.lastTime = performance.now();
+                requestAnimationFrame(t => this.loop(t));
+            }
+
+            loop(currentTime) {
+                if (!this.running) return;
+                const dt = Math.min((currentTime - this.lastTime) / 1000, 0.05);
+                this.lastTime = currentTime;
+                this.update(dt);
+                this.draw();
+                requestAnimationFrame(t => this.loop(t));
+            }
+        }
+
+        const game = new Game();
+        window.game = game;
+    </script>
+</body>
+</html>

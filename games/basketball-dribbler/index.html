@@ -222,7 +222,7 @@
     <script>
         const W = 1280, H = 720;
         const BALL_R = 15;
-        const MOVE_SPEED = 260;
+        const MOVE_SPEED = 580;
         const SHOOT_POWER = 1100;
         const GRAVITY = 1200;
         const BACKBOARD_W = 120, BACKBOARD_H = 85;
@@ -232,7 +232,7 @@
         const RIM_THICKNESS = 8;
         const DEFENDER_W = 32, DEFENDER_H = 56;
         const RIM_DEFENDER_W = 36, RIM_DEFENDER_H = 70;
-        const DEFENDER_SPEED = 70;
+        const DEFENDER_SPEED = 36;
         const MAX_LEVEL = 100;
         const STORAGE_KEY = 'basketballDribblerBest';
         const BALL_IMAGES = {
@@ -498,8 +498,8 @@
                     const toBallX = b.x - (d.x + DEFENDER_W / 2);
                     const toBallY = b.y - (d.y + DEFENDER_H / 2);
                     const len = Math.hypot(toBallX, toBallY) || 1;
-                    d.vx = (toBallX / len) * DEFENDER_SPEED * (1 + (this.level / MAX_LEVEL) * 1.5);
-                    d.vy = (toBallY / len) * DEFENDER_SPEED * (1 + (this.level / MAX_LEVEL) * 1.5);
+                    d.vx = (toBallX / len) * DEFENDER_SPEED * (1 + (this.level / MAX_LEVEL) * 0.8);
+                    d.vy = (toBallY / len) * DEFENDER_SPEED * (1 + (this.level / MAX_LEVEL) * 0.8);
                     d.x += d.vx * dt;
                     d.y += d.vy * dt;
                     d.x = Math.max(60, Math.min(W - 60 - DEFENDER_W, d.x));

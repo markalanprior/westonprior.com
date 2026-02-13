@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Carrot Cut</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            touch-action: none;
+        }
+        #game-container {
+            position: relative;
+            width: 1280px;
+            height: 720px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            background-color: #0d1117;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        #ui-layer .menu, #ui-layer .home-btn {
+            pointer-events: auto;
+        }
+        .menu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 2rem;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            border: 2px solid #ed8936;
+            box-shadow: 0 0 15px rgba(237, 137, 54, 0.3);
+            min-width: 300px;
+        }
+        .menu.active {
+            display: block;
+        }
+        h1 {
+            color: #f6ad55;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin-bottom: 1rem;
+        }
+        button {
+            background: #111;
+            color: #f6ad55;
+            border: 1px solid #ed8936;
+            padding: 12px 24px;
+            margin: 8px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        button:hover {
+            background: #ed8936;
+            color: #000;
+            box-shadow: 0 0 10px #ed8936;
+        }
+        #pct-panel {
+            position: absolute;
+            top: 120px;
+            left: 24px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: 1px solid rgba(237, 137, 54, 0.5);
+            font-size: 1.25rem;
+            color: #f6ad55;
+        }
+        #pct-panel .target { font-weight: bold; }
+        #pct-panel .current { color: #a0aec0; font-size: 0.95rem; margin-top: 4px; }
+        #pct-panel .hint { color: #718096; font-size: 0.8rem; margin-top: 6px; }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: #666;
+            font-size: 1rem;
+        }
+        .home-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: #111;
+            color: #f6ad55;
+            border: 1px solid #ed8936;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+        }
+        .home-btn:hover {
+            background: #ed8936;
+            color: #000;
+            box-shadow: 0 0 10px #ed8936;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer">
+            <a href="../../index.html" class="home-btn">Home</a>
+            <div id="pct-panel">
+                <div class="target">Cut at: <span id="target-pct">--</span>%</div>
+                <div class="current">Now: <span id="current-pct">0</span>%</div>
+                <div class="hint">0% = tip, 100% = top under green</div>
+            </div>
+            <div id="start-menu" class="menu active">
+                <h1>Carrot Cut</h1>
+                <p>Cut the carrot at the exact target percentage! A marker moves up the carrot—press Space when the knife is in position to stop it, extend, and cut.</p>
+                <button onclick="game.start()">Start</button>
+            </div>
+            <div id="result-menu" class="menu">
+                <h1 id="result-title">Result</h1>
+                <p id="result-text">Cut at 42%—target was 47%.</p>
+                <button onclick="game.restart()">Try Again</button>
+            </div>
+            <div id="instructions">Space: stop knife and cut</div>
+        </div>
+    </div>
+
+    <script>
+        const CANVAS_WIDTH = 1280;
+        const CANVAS_HEIGHT = 720;
+        const TOLERANCE = 4;
+        const INDICATOR_SPEED = 28;
+        const KNIFE_PERIOD_MS = 2200;
+        const CUT_EXTEND_DURATION = 0.25;
+        const CARROT_TOP = 70;
+        const CARROT_HEIGHT = 340;
+        const CARROT_CENTER_X = 480;
+        const CARROT_WIDTH_TOP = 56;
+        const CARROT_LEAF_HEIGHT = 28;
+        const STRING_LENGTH = 25;
+        const KNIFE_CENTER_Y = CARROT_TOP + STRING_LENGTH + CARROT_LEAF_HEIGHT + CARROT_HEIGHT / 2;
+        const KNIFE_AMPLITUDE = CARROT_HEIGHT / 2;
+        const KNIFE_CENTER_X = 680;
+        const KNIFE_REST_X = 620;
+        const KNIFE_EXTENDED_X = 480;
+
+        const TARGET_PCT = 50;
+
+        class Game {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.canvas.width = CANVAS_WIDTH;
+                this.canvas.height = CANVAS_HEIGHT;
+
+                this.state = 'idle';
+                this.targetPct = 50;
+                this.currentPct = 0;
+                this.cutPct = null;
+                this.knifeY = KNIFE_CENTER_Y;
+                this.knifeX = KNIFE_CENTER_X;
+                this.cutStartTime = 0;
+                this.running = false;
+                this.lastTime = 0;
+
+                window.addEventListener('keydown', e => {
+                    if (e.key === ' ') {
+                        e.preventDefault();
+                        if (this.state === 'aiming') this.triggerCut();
+                    }
+                });
+            }
+
+            start() {
+                document.getElementById('start-menu').classList.remove('active');
+                this.targetPct = TARGET_PCT;
+                this.currentPct = 0;
+                this.cutPct = null;
+                this.state = 'aiming';
+                this.knifeX = KNIFE_CENTER_X;
+                this.running = true;
+                this.lastTime = performance.now();
+                requestAnimationFrame(t => this.loop(t));
+            }
+
+            triggerCut() {
+                this.state = 'cutting';
+                this.cutPct = Math.round(this.currentPct);
+                this.cutStartTime = performance.now();
+            }
+
+            restart() {
+                document.getElementById('result-menu').classList.remove('active');
+                this.start();
+            }
+
+            update(dt) {
+                if (this.state === 'aiming') {
+                    this.currentPct += INDICATOR_SPEED * dt;
+                    if (this.currentPct >= 100) this.currentPct = 0;
+                    const t = performance.now() / 1000;
+                    this.knifeY = KNIFE_CENTER_Y + KNIFE_AMPLITUDE * Math.sin((t * Math.PI * 2 / KNIFE_PERIOD_MS) * 1000);
+                } else if (this.state === 'cutting') {
+                    const elapsed = (performance.now() - this.cutStartTime) / 1000;
+                    if (elapsed >= CUT_EXTEND_DURATION) {
+                        this.state = 'result';
+                        this.showResult();
+                        return;
+                    }
+                    const t = elapsed / CUT_EXTEND_DURATION;
+                    this.knifeX = KNIFE_REST_X + (KNIFE_EXTENDED_X - KNIFE_REST_X) * t;
+                }
+            }
+
+            showResult() {
+                const diff = Math.abs(this.cutPct - this.targetPct);
+                const win = diff <= TOLERANCE;
+                document.getElementById('result-title').textContent = win ? 'Perfect!' : 'Missed!';
+                document.getElementById('result-text').textContent =
+                    'Cut at ' + this.cutPct + '%—target was ' + this.targetPct + '%.';
+                document.getElementById('result-menu').classList.add('active');
+                this.running = false;
+            }
+
+            draw() {
+                this.ctx.fillStyle = '#0d1117';
+                this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+                const carrotTopY = CARROT_TOP + STRING_LENGTH;
+                const carrotBodyTop = carrotTopY + CARROT_LEAF_HEIGHT;
+                const carrotBottomY = carrotBodyTop + CARROT_HEIGHT;
+                const tipY = carrotBottomY;
+
+                this.ctx.strokeStyle = '#4a5568';
+                this.ctx.lineWidth = 3;
+                this.ctx.beginPath();
+                this.ctx.moveTo(CARROT_CENTER_X, CARROT_TOP);
+                this.ctx.lineTo(CARROT_CENTER_X, carrotTopY);
+                this.ctx.stroke();
+
+                // 0% = very tip of orange, 100% = very top of orange (right under the green)
+                const cutY = this.state === 'result' && this.cutPct != null
+                    ? carrotBottomY - (this.cutPct / 100) * CARROT_HEIGHT
+                    : null;
+
+                function widthAt(y) {
+                    if (y <= carrotBodyTop) return CARROT_WIDTH_TOP;
+                    if (y >= tipY) return 0;
+                    return CARROT_WIDTH_TOP * (1 - (y - carrotBodyTop) / CARROT_HEIGHT);
+                }
+
+                this.ctx.fillStyle = '#48bb78';
+                this.ctx.strokeStyle = '#2f8558';
+                this.ctx.lineWidth = 1;
+                this.ctx.beginPath();
+                this.ctx.ellipse(CARROT_CENTER_X, carrotTopY + CARROT_LEAF_HEIGHT / 2, CARROT_WIDTH_TOP / 2 + 8, CARROT_LEAF_HEIGHT / 2, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.stroke();
+
+                this.ctx.fillStyle = '#ed8936';
+                this.ctx.strokeStyle = '#c05621';
+                this.ctx.lineWidth = 2;
+                const topLeft = CARROT_CENTER_X - CARROT_WIDTH_TOP / 2;
+                const topRight = CARROT_CENTER_X + CARROT_WIDTH_TOP / 2;
+                if (cutY != null && this.state === 'result') {
+                    const wCut = widthAt(cutY);
+                    const leftCut = CARROT_CENTER_X - wCut / 2;
+                    const rightCut = CARROT_CENTER_X + wCut / 2;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(topLeft, carrotBodyTop);
+                    this.ctx.lineTo(topRight, carrotBodyTop);
+                    this.ctx.lineTo(rightCut, cutY);
+                    this.ctx.lineTo(leftCut, cutY);
+                    this.ctx.closePath();
+                    this.ctx.fill();
+                    this.ctx.stroke();
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(leftCut, cutY);
+                    this.ctx.lineTo(CARROT_CENTER_X, tipY);
+                    this.ctx.lineTo(rightCut, cutY);
+                    this.ctx.closePath();
+                    this.ctx.fill();
+                    this.ctx.stroke();
+                } else {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(topLeft, carrotBodyTop);
+                    this.ctx.lineTo(topRight, carrotBodyTop);
+                    this.ctx.lineTo(CARROT_CENTER_X, tipY);
+                    this.ctx.lineTo(topLeft, carrotBodyTop);
+                    this.ctx.closePath();
+                    this.ctx.fill();
+                    this.ctx.stroke();
+                }
+
+                this.ctx.fillStyle = '#a0aec0';
+                this.ctx.strokeStyle = '#718096';
+                this.ctx.lineWidth = 1;
+                const spikeLen = 80;
+                const spikeReach = 24;
+                const kx = this.knifeX;
+                const ky = this.knifeY - spikeLen / 2;
+                this.ctx.beginPath();
+                this.ctx.moveTo(kx, ky);
+                this.ctx.lineTo(kx, ky + spikeLen);
+                this.ctx.lineTo(kx - spikeReach, this.knifeY);
+                this.ctx.closePath();
+                this.ctx.fill();
+                this.ctx.stroke();
+
+                document.getElementById('target-pct').textContent = this.targetPct;
+                document.getElementById('current-pct').textContent = Math.round(this.currentPct);
+            }
+
+            loop(currentTime) {
+                if (!this.running) return;
+                const dt = Math.min((currentTime - this.lastTime) / 1000, 0.05);
+                this.lastTime = currentTime;
+                this.update(dt);
+                this.draw();
+                requestAnimationFrame(t => this.loop(t));
+            }
+        }
+
+        const game = new Game();
+        window.game = game;
+    </script>
+</body>
+</html>

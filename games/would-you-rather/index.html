@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Would You Rather</title>
+    <style>
+        * { box-sizing: border-box; }
+        html {
+            -webkit-tap-highlight-color: transparent;
+            -webkit-text-size-adjust: 100%;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0d1117;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            padding-top: max(20px, env(safe-area-inset-top));
+            padding-bottom: max(20px, env(safe-area-inset-bottom));
+            padding-left: max(20px, env(safe-area-inset-left));
+            padding-right: max(20px, env(safe-area-inset-right));
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        .home-btn {
+            position: absolute;
+            top: max(20px, env(safe-area-inset-top));
+            right: max(20px, env(safe-area-inset-right));
+            padding: 12px 20px;
+            min-height: 44px;
+            min-width: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #1a1a1a;
+            color: #00f2ff;
+            border: 1px solid #00f2ff;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 1rem;
+            transition: all 0.2s;
+            touch-action: manipulation;
+        }
+        .home-btn:hover, .home-btn:active {
+            background: #00f2ff;
+            color: #000;
+            box-shadow: 0 0 10px #00f2ff;
+        }
+        #game-container {
+            max-width: 1000px;
+            width: 100%;
+        }
+        .question-counter {
+            text-align: center;
+            color: #888;
+            font-size: 1.05rem;
+            margin-bottom: 12px;
+        }
+        h2 {
+            color: #00f2ff;
+            text-align: center;
+            font-size: 1.85rem;
+            margin: 0 0 40px;
+            line-height: 1.4;
+        }
+        .options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 28px;
+            margin-bottom: 36px;
+        }
+        @media (max-width: 660px) {
+            .options {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+            h2 { font-size: 1.5rem; margin-bottom: 24px; }
+            .option-box { min-height: 100px; padding: 20px; }
+            .option-box .text { font-size: 1.1rem; }
+        }
+        .option-box {
+            background: #1a1a1a;
+            border: 2px solid #333;
+            border-radius: 14px;
+            padding: 28px;
+            cursor: pointer;
+            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+            min-height: 140px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .option-box:hover, .option-box:active {
+            border-color: #555;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+        }
+        .option-box.chosen {
+            border-color: #00f2ff;
+            box-shadow: 0 0 20px rgba(0, 242, 255, 0.4);
+            background: rgba(0, 242, 255, 0.08);
+        }
+        .option-box .text {
+            font-size: 1.25rem;
+            line-height: 1.5;
+        }
+        .option-box .check {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 1.75rem;
+            color: #00f2ff;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .option-box.chosen .check {
+            opacity: 1;
+        }
+        .next-wrap {
+            text-align: center;
+        }
+        .next-btn {
+            background: #1a1a1a;
+            color: #00f2ff;
+            border: 1px solid #00f2ff;
+            padding: 14px 32px;
+            min-height: 48px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.15rem;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .next-btn:hover, .next-btn:active {
+            background: #00f2ff;
+            color: #000;
+            box-shadow: 0 0 12px #00f2ff;
+        }
+    </style>
+</head>
+<body>
+    <a href="../../index.html" class="home-btn">Home</a>
+    <div id="game-container">
+        <p class="question-counter" id="counter">Question 1</p>
+        <h2 id="question">Would you rather...</h2>
+        <div class="options">
+            <div class="option-box" id="option-a" data-option="a" role="button" tabindex="0">
+                <span class="check" aria-hidden="true">✓</span>
+                <span class="text" id="text-a">Option A</span>
+            </div>
+            <div class="option-box" id="option-b" data-option="b" role="button" tabindex="0">
+                <span class="check" aria-hidden="true">✓</span>
+                <span class="text" id="text-b">Option B</span>
+            </div>
+        </div>
+        <div class="next-wrap">
+            <button type="button" class="next-btn" id="next-btn">Next question</button>
+        </div>
+    </div>
+
+    <script>
+        const QUESTIONS = [
+            { question: 'Would you rather be able to fly or turn invisible', optionA: 'Be able to fly', optionB: 'Turn invisible' },
+            { question: 'Would you rather live in a treehouse or a castle', optionA: 'Live in a treehouse', optionB: 'A castle' },
+            { question: 'Would you rather have a pet dragon or a pet dolphin', optionA: 'Have a pet dragon', optionB: 'A pet dolphin' },
+            { question: 'Would you rather run as fast as a cheetah or jump as high as a kangaroo', optionA: 'Run as fast as a cheetah', optionB: 'Jump as high as a kangaroo' },
+            { question: 'Would you rather explore space or explore the deep ocean', optionA: 'Explore space', optionB: 'Explore the deep ocean' },
+            { question: 'Would you rather have super strength or super speed', optionA: 'Have super strength', optionB: 'Super speed' },
+            { question: "Would you rather build the world's tallest Lego tower or the world's biggest fort", optionA: "Build the world's tallest Lego tower", optionB: "The world's biggest fort" },
+            { question: 'Would you rather be a famous athlete or a famous inventor', optionA: 'Be a famous athlete', optionB: 'A famous inventor' },
+            { question: 'Would you rather eat only pizza for a week or only tacos for a week', optionA: 'Eat only pizza for a week', optionB: 'Only tacos for a week' },
+            { question: 'Would you rather have a robot helper or a magic wand', optionA: 'Have a robot helper', optionB: 'A magic wand' },
+            { question: 'Would you rather time travel to the past or the future', optionA: 'Time travel to the past', optionB: 'The future' },
+            { question: 'Would you rather be able to talk to animals or speak every language', optionA: 'Be able to talk to animals', optionB: 'Speak every language' },
+            { question: 'Would you rather win a gold medal or discover a hidden treasure', optionA: 'Win a gold medal', optionB: 'Discover a hidden treasure' },
+            { question: 'Would you rather live on a pirate ship or in a spaceship', optionA: 'Live on a pirate ship', optionB: 'In a spaceship' },
+            { question: 'Would you rather be able to breathe underwater or walk through walls', optionA: 'Be able to breathe underwater', optionB: 'Walk through walls' },
+            { question: 'Would you rather have a trampoline in every room or a slide instead of stairs', optionA: 'Have a trampoline in every room', optionB: 'A slide instead of stairs' },
+            { question: 'Would you rather be a ninja or a knight', optionA: 'Be a ninja', optionB: 'A knight' },
+            { question: 'Would you rather have a million dollars in toys or unlimited books', optionA: 'Have a million dollars in toys', optionB: 'Unlimited books' },
+            { question: 'Would you rather climb Mount Everest or hike through the Amazon rainforest', optionA: 'Climb Mount Everest', optionB: 'Hike through the Amazon rainforest' },
+            { question: 'Would you rather be able to control the weather or control time', optionA: 'Be able to control the weather', optionB: 'Control time' },
+            { question: 'Would you rather have ice powers or fire powers', optionA: 'Have ice powers', optionB: 'Fire powers' },
+            { question: 'Would you rather eat a giant marshmallow or a giant cookie', optionA: 'Eat a giant marshmallow', optionB: 'A giant cookie' },
+            { question: 'Would you rather have a secret hideout or a secret identity', optionA: 'Have a secret hideout', optionB: 'A secret identity' },
+            { question: 'Would you rather ride a roller coaster every day or go swimming every day', optionA: 'Ride a roller coaster every day', optionB: 'Go swimming every day' },
+            { question: 'Would you rather live in a world made of candy or a world made of video games', optionA: 'Live in a world made of candy', optionB: 'A world made of video games' },
+            { question: 'Would you rather have wheels instead of feet or wings instead of arms', optionA: 'Have wheels instead of feet', optionB: 'Wings instead of arms' },
+            { question: 'Would you rather be captain of a pirate crew or commander of a space mission', optionA: 'Be captain of a pirate crew', optionB: 'Commander of a space mission' },
+            { question: 'Would you rather find a map to buried treasure or discover a new planet', optionA: 'Find a map to buried treasure', optionB: 'Discover a new planet' },
+            { question: 'Would you rather have a pet monkey or a pet penguin', optionA: 'Have a pet monkey', optionB: 'A pet penguin' },
+            { question: 'Would you rather never do homework again or never do chores again', optionA: 'Never do homework again', optionB: 'Never do chores again' },
+            { question: 'Would you rather build your own go kart or your own treehouse', optionA: 'Build your own go kart', optionB: 'Your own treehouse' },
+            { question: 'Would you rather be able to shrink to ant size or grow to giant size', optionA: 'Be able to shrink to ant size', optionB: 'Grow to giant size' },
+            { question: 'Would you rather visit the North Pole or the South Pole', optionA: 'Visit the North Pole', optionB: 'The South Pole' },
+            { question: 'Would you rather be the best at math or the best at sports', optionA: 'Be the best at math', optionB: 'The best at sports' },
+            { question: 'Would you rather swim with sharks or camp with bears', optionA: 'Swim with sharks', optionB: 'Camp with bears' },
+            { question: 'Would you rather ride a dragon or ride a giant eagle', optionA: 'Ride a dragon', optionB: 'Ride a giant eagle' },
+            { question: 'Would you rather be able to teleport or read minds', optionA: 'Be able to teleport', optionB: 'Read minds' },
+            { question: 'Would you rather find a hidden door in your house or a secret tunnel in your yard', optionA: 'Find a hidden door in your house', optionB: 'A secret tunnel in your yard' },
+            { question: 'Would you rather eat ice cream every day or never eat candy again', optionA: 'Eat ice cream every day', optionB: 'Never eat candy again' },
+            { question: 'Would you rather be on a winning team or break a world record', optionA: 'Be on a winning team', optionB: 'Break a world record' },
+            { question: 'Would you rather be a race car driver or a pilot', optionA: 'Be a race car driver', optionB: 'A pilot' },
+            { question: "Would you rather have a lightsaber or Captain America's shield", optionA: 'Have a lightsaber', optionB: "Captain America's shield" },
+            { question: 'Would you rather live without TV or without video games', optionA: 'Live without TV', optionB: 'Without video games' },
+            { question: 'Would you rather be able to control animals or control machines', optionA: 'Be able to control animals', optionB: 'Control machines' },
+            { question: 'Would you rather explore a haunted house or a mysterious jungle', optionA: 'Explore a haunted house', optionB: 'A mysterious jungle' },
+            { question: 'Would you rather be friends with a wizard or a superhero', optionA: 'Be friends with a wizard', optionB: 'A superhero' },
+            { question: 'Would you rather have a giant pet turtle or a tiny pet elephant', optionA: 'Have a giant pet turtle', optionB: 'A tiny pet elephant' },
+            { question: 'Would you rather build a snow fort or a sand castle', optionA: 'Build a snow fort', optionB: 'A sand castle' },
+            { question: 'Would you rather have x ray vision or night vision', optionA: 'Have x ray vision', optionB: 'Night vision' },
+            { question: 'Would you rather win a lifetime supply of pizza or ice cream', optionA: 'Win a lifetime supply of pizza', optionB: 'Ice cream' },
+            { question: 'Would you rather be a detective or a secret agent', optionA: 'Be a detective', optionB: 'A secret agent' },
+            { question: 'Would you rather live in the wild for a week or on a cruise ship for a week', optionA: 'Live in the wild for a week', optionB: 'On a cruise ship for a week' },
+            { question: 'Would you rather invent a new sport or a new holiday', optionA: 'Invent a new sport', optionB: 'A new holiday' },
+            { question: 'Would you rather have your own YouTube channel or your own comic book series', optionA: 'Have your own YouTube channel', optionB: 'Your own comic book series' },
+            { question: 'Would you rather ride the biggest wave or ski the tallest mountain', optionA: 'Ride the biggest wave', optionB: 'Ski the tallest mountain' },
+            { question: 'Would you rather have a jetpack or a hoverboard', optionA: 'Have a jetpack', optionB: 'A hoverboard' },
+            { question: 'Would you rather be able to pause time or rewind time', optionA: 'Be able to pause time', optionB: 'Rewind time' },
+            { question: 'Would you rather visit a volcano or a glacier', optionA: 'Visit a volcano', optionB: 'A glacier' },
+            { question: 'Would you rather be the fastest runner in your school or the smartest kid in your class', optionA: 'Be the fastest runner in your school', optionB: 'The smartest kid in your class' },
+            { question: 'Would you rather have a giant slingshot or a giant water balloon launcher', optionA: 'Have a giant slingshot', optionB: 'A giant water balloon launcher' },
+            { question: 'Would you rather live in a submarine or a treehouse village', optionA: 'Live in a submarine', optionB: 'A treehouse village' },
+            { question: 'Would you rather have a magical backpack that never runs out of snacks or one that gives you any gadget you want', optionA: 'Have a magical backpack that never runs out of snacks', optionB: 'One that gives you any gadget you want' },
+            { question: 'Would you rather build a robot or program a video game', optionA: 'Build a robot', optionB: 'Program a video game' },
+            { question: 'Would you rather meet a real life dinosaur or a real life unicorn', optionA: 'Meet a real life dinosaur', optionB: 'A real life unicorn' },
+            { question: 'Would you rather be able to freeze time or speed it up', optionA: 'Be able to freeze time', optionB: 'Speed it up' },
+            { question: 'Would you rather go skydiving or scuba diving', optionA: 'Go skydiving', optionB: 'Scuba diving' },
+            { question: 'Would you rather have glow in the dark hair or color changing eyes', optionA: 'Have glow in the dark hair', optionB: 'Color changing eyes' },
+            { question: 'Would you rather own a sports stadium or a giant arcade', optionA: 'Own a sports stadium', optionB: 'A giant arcade' },
+            { question: 'Would you rather ride in a hot air balloon or a submarine', optionA: 'Ride in a hot air balloon', optionB: 'A submarine' },
+            { question: 'Would you rather be able to see the future or relive the past', optionA: 'Be able to see the future', optionB: 'Relive the past' },
+            { question: 'Would you rather have a secret base under your school or under your house', optionA: 'Have a secret base under your school', optionB: 'Under your house' },
+            { question: 'Would you rather be able to climb any wall or run across water', optionA: 'Be able to climb any wall', optionB: 'Run across water' },
+            { question: 'Would you rather have super hearing or super sight', optionA: 'Have super hearing', optionB: 'Super sight' },
+            { question: 'Would you rather discover a new animal species or a new planet', optionA: 'Discover a new animal species', optionB: 'A new planet' },
+            { question: 'Would you rather be a master chef or a master builder', optionA: 'Be a master chef', optionB: 'A master builder' },
+            { question: 'Would you rather live in a city of robots or a city of animals', optionA: 'Live in a city of robots', optionB: 'A city of animals' },
+            { question: 'Would you rather have a talking skateboard or a flying bike', optionA: 'Have a talking skateboard', optionB: 'A flying bike' },
+            { question: 'Would you rather explore a giant maze or solve a giant puzzle', optionA: 'Explore a giant maze', optionB: 'Solve a giant puzzle' },
+            { question: 'Would you rather have a magic pen that makes drawings come alive or a camera that freezes time', optionA: 'Have a magic pen that makes drawings come alive', optionB: 'A camera that freezes time' },
+            { question: 'Would you rather be able to control gravity or turn into any animal', optionA: 'Be able to control gravity', optionB: 'Turn into any animal' },
+            { question: 'Would you rather win a giant trophy or a giant treasure chest', optionA: 'Win a giant trophy', optionB: 'A giant treasure chest' },
+            { question: 'Would you rather build a bridge across a canyon or dig a tunnel through a mountain', optionA: 'Build a bridge across a canyon', optionB: 'Dig a tunnel through a mountain' },
+            { question: 'Would you rather have a pet wolf or a pet falcon', optionA: 'Have a pet wolf', optionB: 'A pet falcon' },
+            { question: 'Would you rather go on a safari or an Arctic expedition', optionA: 'Go on a safari', optionB: 'An Arctic expedition' },
+            { question: 'Would you rather ride the fastest roller coaster in the world or the tallest', optionA: 'Ride the fastest roller coaster in the world', optionB: 'The tallest' },
+            { question: 'Would you rather live in a giant Lego house or a giant Minecraft world', optionA: 'Live in a giant Lego house', optionB: 'A giant Minecraft world' },
+            { question: 'Would you rather have a magic carpet or a flying car', optionA: 'Have a magic carpet', optionB: 'A flying car' },
+            { question: 'Would you rather be a famous explorer or a famous scientist', optionA: 'Be a famous explorer', optionB: 'A famous scientist' },
+            { question: 'Would you rather have the ability to breathe fire or shoot ice', optionA: 'Have the ability to breathe fire', optionB: 'Shoot ice' },
+            { question: 'Would you rather win a championship game or solve a mystery', optionA: 'Win a championship game', optionB: 'Solve a mystery' },
+            { question: 'Would you rather live on a tropical island or in a snowy mountain cabin', optionA: 'Live on a tropical island', optionB: 'In a snowy mountain cabin' },
+            { question: 'Would you rather have a giant robot friend or a tiny dragon friend', optionA: 'Have a giant robot friend', optionB: 'A tiny dragon friend' },
+            { question: 'Would you rather be the leader of a treasure hunt or the referee of a championship game', optionA: 'Be the leader of a treasure hunt', optionB: 'The referee of a championship game' },
+            { question: 'Would you rather find a hidden cave or a hidden waterfall', optionA: 'Find a hidden cave', optionB: 'A hidden waterfall' },
+            { question: 'Would you rather have a backpack that makes you invisible or shoes that make you super fast', optionA: 'Have a backpack that makes you invisible', optionB: 'Shoes that make you super fast' },
+            { question: 'Would you rather discover a new star or invent a new machine', optionA: 'Discover a new star', optionB: 'Invent a new machine' },
+            { question: 'Would you rather ride a mechanical bull or surf a giant wave', optionA: 'Ride a mechanical bull', optionB: 'Surf a giant wave' },
+            { question: 'Would you rather have a house with secret rooms or a yard with secret tunnels', optionA: 'Have a house with secret rooms', optionB: 'A yard with secret tunnels' },
+            { question: 'Would you rather spend a day as your favorite video game character or your favorite sports star', optionA: 'Spend a day as your favorite video game character', optionB: 'Your favorite sports star' },
+            { question: 'Would you rather have an endless summer or endless snow days', optionA: 'Have an endless summer', optionB: 'Endless snow days' },
+            { question: 'Would you rather have a tree that grows candy or a tree that grows video games', optionA: 'Have a tree that grows candy', optionB: 'A tree that grows video games' },
+            { question: 'Would you rather race a horse or race a speedboat', optionA: 'Race a horse', optionB: 'Race a speedboat' },
+            { question: 'Would you rather be able to turn into mist or turn into stone', optionA: 'Be able to turn into mist', optionB: 'Turn into stone' },
+            { question: 'Would you rather have a room filled with trampolines or a room filled with foam blocks', optionA: 'Have a room filled with trampolines', optionB: 'A room filled with foam blocks' },
+            { question: 'Would you rather discover a hidden island or a hidden mountain city', optionA: 'Discover a hidden island', optionB: 'A hidden mountain city' },
+            { question: 'Would you rather have a pet cheetah or a pet hawk', optionA: 'Have a pet cheetah', optionB: 'A pet hawk' },
+            { question: 'Would you rather be the goalie in a championship game or take the winning shot', optionA: 'Be the goalie in a championship game', optionB: 'Take the winning shot' },
+            { question: 'Would you rather dig for fossils or search for gold', optionA: 'Dig for fossils', optionB: 'Search for gold' },
+            { question: 'Would you rather have a robot that does homework or one that builds inventions with you', optionA: 'Have a robot that does homework', optionB: 'One that builds inventions with you' },
+            { question: 'Would you rather ride in a race car or steer a sailboat', optionA: 'Ride in a race car', optionB: 'Steer a sailboat' },
+            { question: 'Would you rather be able to whistle so loudly it shakes trees or clap so hard it makes thunder', optionA: 'Be able to whistle so loudly it shakes trees', optionB: 'Clap so hard it makes thunder' },
+            { question: 'Would you rather have a secret code only you understand or a secret handshake with your best friend', optionA: 'Have a secret code only you understand', optionB: 'A secret handshake with your best friend' },
+            { question: 'Would you rather climb the tallest tree in the forest or dive to the bottom of a deep lake', optionA: 'Climb the tallest tree in the forest', optionB: 'Dive to the bottom of a deep lake' },
+            { question: 'Would you rather live in a lighthouse or in a mountain cave', optionA: 'Live in a lighthouse', optionB: 'In a mountain cave' },
+            { question: 'Would you rather have glow in the dark shoes or light up shoelaces', optionA: 'Have glow in the dark shoes', optionB: 'Light up shoelaces' },
+            { question: 'Would you rather be able to summon rain or summon wind', optionA: 'Be able to summon rain', optionB: 'Summon wind' },
+            { question: 'Would you rather ride a mechanical dragon or a mechanical shark', optionA: 'Ride a mechanical dragon', optionB: 'A mechanical shark' },
+            { question: 'Would you rather be the strongest kid in school or the bravest', optionA: 'Be the strongest kid in school', optionB: 'The bravest' },
+            { question: 'Would you rather have a talking compass or a talking map', optionA: 'Have a talking compass', optionB: 'A talking map' },
+            { question: 'Would you rather build a giant snow maze or a giant corn maze', optionA: 'Build a giant snow maze', optionB: 'A giant corn maze' },
+            { question: 'Would you rather find a time capsule from 100 years ago or bury one for the future', optionA: 'Find a time capsule from 100 years ago', optionB: 'Bury one for the future' },
+            { question: 'Would you rather be able to bounce like a rubber ball or stretch like elastic', optionA: 'Be able to bounce like a rubber ball', optionB: 'Stretch like elastic' },
+            { question: 'Would you rather have a hover scooter or rocket powered roller skates', optionA: 'Have a hover scooter', optionB: 'Rocket powered roller skates' },
+            { question: 'Would you rather explore a crystal cave or a lava cave', optionA: 'Explore a crystal cave', optionB: 'A lava cave' },
+            { question: 'Would you rather be able to draw perfectly or sing perfectly', optionA: 'Be able to draw perfectly', optionB: 'Sing perfectly' },
+            { question: 'Would you rather have a hat that makes you invisible or gloves that give you super grip', optionA: 'Have a hat that makes you invisible', optionB: 'Gloves that give you super grip' },
+            { question: 'Would you rather captain a submarine or pilot a rescue helicopter', optionA: 'Captain a submarine', optionB: 'Pilot a rescue helicopter' },
+            { question: 'Would you rather be able to smell treasure or hear danger', optionA: 'Be able to smell treasure', optionB: 'Hear danger' },
+            { question: 'Would you rather have a magical treehouse that moves or one that flies', optionA: 'Have a magical treehouse that moves', optionB: 'One that flies' },
+            { question: 'Would you rather win a scavenger hunt or win a talent show', optionA: 'Win a scavenger hunt', optionB: 'Win a talent show' },
+            { question: 'Would you rather live in a world where it is always summer afternoon or always winter morning', optionA: 'Live in a world where it is always summer afternoon', optionB: 'Always winter morning' },
+            { question: 'Would you rather have a giant sloth as a pet or a tiny rhino', optionA: 'Have a giant sloth as a pet', optionB: 'A tiny rhino' },
+            { question: 'Would you rather be able to create portals or create force fields', optionA: 'Be able to create portals', optionB: 'Create force fields' },
+            { question: 'Would you rather solve riddles or solve mazes', optionA: 'Solve riddles', optionB: 'Solve mazes' },
+            { question: 'Would you rather build a raft and float down a river or hike to a hidden waterfall', optionA: 'Build a raft and float down a river', optionB: 'Hike to a hidden waterfall' },
+            { question: 'Would you rather be able to talk to sea creatures or forest animals', optionA: 'Be able to talk to sea creatures', optionB: 'Forest animals' },
+            { question: 'Would you rather have armor made of light or armor made of rock', optionA: 'Have armor made of light', optionB: 'Armor made of rock' },
+            { question: 'Would you rather explore an abandoned castle or an abandoned spaceship', optionA: 'Explore an abandoned castle', optionB: 'An abandoned spaceship' },
+            { question: 'Would you rather eat only breakfast foods for a month or only dinner foods', optionA: 'Eat only breakfast foods for a month', optionB: 'Only dinner foods' },
+            { question: 'Would you rather invent a new board game or design a new playground', optionA: 'Invent a new board game', optionB: 'Design a new playground' },
+            { question: 'Would you rather have super balance or super memory', optionA: 'Have super balance', optionB: 'Super memory' },
+            { question: 'Would you rather be able to freeze objects or make them float', optionA: 'Be able to freeze objects', optionB: 'Make them float' },
+            { question: 'Would you rather ride the tallest zipline or the longest waterslide', optionA: 'Ride the tallest zipline', optionB: 'The longest waterslide' },
+            { question: 'Would you rather have a backpack that gives you tools or one that gives you snacks', optionA: 'Have a backpack that gives you tools', optionB: 'One that gives you snacks' },
+            { question: 'Would you rather be the best climber or the best swimmer', optionA: 'Be the best climber', optionB: 'The best swimmer' },
+            { question: 'Would you rather live in a house shaped like a rocket or shaped like a pirate ship', optionA: 'Live in a house shaped like a rocket', optionB: 'Shaped like a pirate ship' },
+            { question: 'Would you rather have a friendly ghost or a friendly robot', optionA: 'Have a friendly ghost', optionB: 'A friendly robot' },
+            { question: 'Would you rather explore a coral reef or a desert canyon', optionA: 'Explore a coral reef', optionB: 'A desert canyon' },
+            { question: 'Would you rather have shoes that let you stick to ceilings or gloves that let you stick to walls', optionA: 'Have shoes that let you stick to ceilings', optionB: 'Gloves that let you stick to walls' },
+            { question: 'Would you rather be able to predict the weather or predict the score of a game', optionA: 'Be able to predict the weather', optionB: 'Predict the score of a game' },
+            { question: 'Would you rather have a treehouse with a drawbridge or one with a trapdoor', optionA: 'Have a treehouse with a drawbridge', optionB: 'One with a trapdoor' },
+            { question: 'Would you rather be able to hear animals thoughts or understand baby talk', optionA: 'Be able to hear animals thoughts', optionB: 'Understand baby talk' },
+            { question: 'Would you rather build a robot dog or a robot dinosaur', optionA: 'Build a robot dog', optionB: 'A robot dinosaur' },
+            { question: 'Would you rather live near a volcano or near a glacier', optionA: 'Live near a volcano', optionB: 'Near a glacier' },
+            { question: 'Would you rather be the leader of a team or the secret hero behind the scenes', optionA: 'Be the leader of a team', optionB: 'The secret hero behind the scenes' },
+            { question: 'Would you rather have lightning powers or water powers', optionA: 'Have lightning powers', optionB: 'Water powers' },
+            { question: 'Would you rather be able to see in total darkness or see through fog', optionA: 'Be able to see in total darkness', optionB: 'See through fog' },
+            { question: 'Would you rather have a secret underground lab or a secret rooftop observatory', optionA: 'Have a secret underground lab', optionB: 'A secret rooftop observatory' },
+            { question: 'Would you rather go on a treasure hunt in the jungle or in the Arctic', optionA: 'Go on a treasure hunt in the jungle', optionB: 'In the Arctic' },
+            { question: 'Would you rather ride a giant wave or snowboard down a steep hill', optionA: 'Ride a giant wave', optionB: 'Snowboard down a steep hill' },
+            { question: 'Would you rather be able to build anything out of wood or anything out of metal', optionA: 'Be able to build anything out of wood', optionB: 'Anything out of metal' },
+            { question: 'Would you rather have a pet octopus or a pet fox', optionA: 'Have a pet octopus', optionB: 'A pet fox' },
+            { question: 'Would you rather discover a hidden city underwater or one in the clouds', optionA: 'Discover a hidden city underwater', optionB: 'One in the clouds' },
+            { question: 'Would you rather be a master archer or a master swordsman', optionA: 'Be a master archer', optionB: 'A master swordsman' },
+            { question: 'Would you rather have a flying skateboard or a flying scooter', optionA: 'Have a flying skateboard', optionB: 'A flying scooter' },
+            { question: 'Would you rather invent a new ice cream flavor or a new pizza topping', optionA: 'Invent a new ice cream flavor', optionB: 'A new pizza topping' },
+            { question: 'Would you rather have super strong magnets for hands or super sticky feet', optionA: 'Have super strong magnets for hands', optionB: 'Super sticky feet' },
+            { question: 'Would you rather be able to control plants or control electricity', optionA: 'Be able to control plants', optionB: 'Control electricity' },
+            { question: 'Would you rather live on a houseboat or in a mountain lodge', optionA: 'Live on a houseboat', optionB: 'In a mountain lodge' },
+            { question: 'Would you rather be able to turn invisible at night or during the day', optionA: 'Be able to turn invisible at night', optionB: 'During the day' },
+            { question: 'Would you rather ride a camel across the desert or a husky sled across snow', optionA: 'Ride a camel across the desert', optionB: 'A husky sled across snow' },
+            { question: 'Would you rather have a magic rope that always holds or a magic shield that never breaks', optionA: 'Have a magic rope that always holds', optionB: 'A magic shield that never breaks' },
+            { question: 'Would you rather explore a giant library maze or a giant jungle maze', optionA: 'Explore a giant library maze', optionB: 'A giant jungle maze' },
+            { question: 'Would you rather be able to build the fastest go kart or the highest flying kite', optionA: 'Be able to build the fastest go kart', optionB: 'The highest flying kite' },
+            { question: 'Would you rather be able to stop hiccups instantly or stop sneezes instantly', optionA: 'Be able to stop hiccups instantly', optionB: 'Stop sneezes instantly' },
+            { question: 'Would you rather have a pet parrot that tells jokes or a dog that does math', optionA: 'Have a pet parrot that tells jokes', optionB: 'A dog that does math' },
+            { question: 'Would you rather invent a new sport with flying discs or bouncing balls', optionA: 'Invent a new sport with flying discs', optionB: 'Bouncing balls' },
+            { question: 'Would you rather ride a giant beetle or a giant frog', optionA: 'Ride a giant beetle', optionB: 'A giant frog' },
+            { question: 'Would you rather have super accurate aim or super quick reflexes', optionA: 'Have super accurate aim', optionB: 'Super quick reflexes' },
+            { question: 'Would you rather live in a glass dome under the sea or under the stars', optionA: 'Live in a glass dome under the sea', optionB: 'Under the stars' },
+            { question: 'Would you rather discover a lost treasure ship or a lost train', optionA: 'Discover a lost treasure ship', optionB: 'A lost train' },
+            { question: 'Would you rather have a belt that gives you strength or boots that give you speed', optionA: 'Have a belt that gives you strength', optionB: 'Boots that give you speed' },
+            { question: 'Would you rather be able to make tiny earthquakes or tiny whirlwinds', optionA: 'Be able to make tiny earthquakes', optionB: 'Tiny whirlwinds' },
+            { question: 'Would you rather be the fastest swimmer in the ocean or the fastest runner in the desert', optionA: 'Be the fastest swimmer in the ocean', optionB: 'The fastest runner in the desert' },
+            { question: 'Would you rather have a friendly giant as a neighbor or a friendly wizard', optionA: 'Have a friendly giant as a neighbor', optionB: 'A friendly wizard' },
+            { question: 'Would you rather design your own theme park ride or your own video game level', optionA: 'Design your own theme park ride', optionB: 'Your own video game level' },
+            { question: 'Would you rather be able to glide like a squirrel or dive like a falcon', optionA: 'Be able to glide like a squirrel', optionB: 'Dive like a falcon' },
+            { question: 'Would you rather find a secret door in your classroom or in the gym', optionA: 'Find a secret door in your classroom', optionB: 'In the gym' },
+            { question: 'Would you rather be able to grow a beard instantly or change your hairstyle instantly', optionA: 'Be able to grow a beard instantly', optionB: 'Change your hairstyle instantly' },
+            { question: 'Would you rather explore a frozen shipwreck or a sunken pirate ship', optionA: 'Explore a frozen shipwreck', optionB: 'A sunken pirate ship' },
+            { question: 'Would you rather have a mechanical arm that lifts cars or mechanical legs that jump rooftops', optionA: 'Have a mechanical arm that lifts cars', optionB: 'Mechanical legs that jump rooftops' },
+            { question: 'Would you rather be able to breathe fire underwater or ice on land', optionA: 'Be able to breathe fire underwater', optionB: 'Ice on land' },
+            { question: 'Would you rather discover a new constellation or name a new dinosaur', optionA: 'Discover a new constellation', optionB: 'Name a new dinosaur' },
+            { question: 'Would you rather ride a jet ski or a snowmobile', optionA: 'Ride a jet ski', optionB: 'A snowmobile' },
+            { question: 'Would you rather have a house with a moat or a house with a watchtower', optionA: 'Have a house with a moat', optionB: 'A house with a watchtower' },
+            { question: 'Would you rather be able to rewind a bad day or fast forward a boring day', optionA: 'Be able to rewind a bad day', optionB: 'Fast forward a boring day' },
+            { question: 'Would you rather have a treasure chest that refills or a toolbox that refills', optionA: 'Have a treasure chest that refills', optionB: 'A toolbox that refills' },
+            { question: 'Would you rather lead an expedition into the jungle or into outer space', optionA: 'Lead an expedition into the jungle', optionB: 'Into outer space' },
+            { question: 'Would you rather have a pet badger or a pet raccoon', optionA: 'Have a pet badger', optionB: 'A pet raccoon' },
+            { question: 'Would you rather build the tallest sand tower ever or the deepest snow tunnel ever', optionA: 'Build the tallest sand tower ever', optionB: 'The deepest snow tunnel ever' }
+        ];
+
+        let currentIndex = -1;
+        let chosen = null;
+        let deck = [];
+        let deckPosition = 0;
+        let shownThisRound = 0;
+
+        function shuffleDeck() {
+            deck = QUESTIONS.map((_, i) => i);
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+            deckPosition = 0;
+            shownThisRound = 0;
+        }
+
+        function nextQuestionIndex() {
+            if (deckPosition >= deck.length) shuffleDeck();
+            return deck[deckPosition++];
+        }
+
+        shuffleDeck();
+
+        function showQuestion() {
+            currentIndex = nextQuestionIndex();
+            shownThisRound++;
+            chosen = null;
+
+            const q = QUESTIONS[currentIndex];
+            document.getElementById('question').textContent = q.question;
+            document.getElementById('text-a').textContent = q.optionA;
+            document.getElementById('text-b').textContent = q.optionB;
+            document.getElementById('counter').textContent = 'Question ' + shownThisRound + ' of ' + QUESTIONS.length;
+
+            document.getElementById('option-a').classList.remove('chosen');
+            document.getElementById('option-b').classList.remove('chosen');
+        }
+
+        function selectOption(option) {
+            chosen = option;
+            document.getElementById('option-a').classList.toggle('chosen', option === 'a');
+            document.getElementById('option-b').classList.toggle('chosen', option === 'b');
+        }
+
+        document.getElementById('option-a').addEventListener('click', () => selectOption('a'));
+        document.getElementById('option-b').addEventListener('click', () => selectOption('b'));
+        document.getElementById('option-a').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectOption('a'); } });
+        document.getElementById('option-b').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectOption('b'); } });
+
+        document.getElementById('next-btn').addEventListener('click', showQuestion);
+
+        showQuestion();
+    </script>
+</body>
+</html>
