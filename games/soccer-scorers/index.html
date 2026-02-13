@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Soccer Scorers</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0a0a0a;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            touch-action: none;
+        }
+        #game-container {
+            position: relative;
+            width: 1280px;
+            height: 720px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+        }
+        #ui-layer .menu, .home-btn, .ball-opt { pointer-events: auto; }
+        .menu {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 2rem;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            border: 2px solid #22c55e;
+            box-shadow: 0 0 15px rgba(34, 197, 94, 0.3);
+        }
+        .menu.active { display: block; }
+        h1 {
+            color: #22c55e;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin-bottom: 1.5rem;
+        }
+        button {
+            background: #111;
+            color: #22c55e;
+            border: 1px solid #22c55e;
+            padding: 15px 30px;
+            margin: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        button:hover {
+            background: #22c55e;
+            color: #000;
+            box-shadow: 0 0 10px #22c55e;
+        }
+        #hud {
+            position: absolute;
+            top: 20px; left: 20px;
+            font-size: 1.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            color: #22c55e;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: #666;
+            font-size: 1rem;
+        }
+        .home-btn {
+            position: absolute;
+            top: 20px; right: 20px;
+            padding: 10px 20px;
+            background: #111;
+            color: #22c55e;
+            border: 1px solid #22c55e;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.2s;
+        }
+        .home-btn:hover {
+            background: #22c55e;
+            color: #000;
+        }
+        .start-menu-content {
+            display: flex;
+            gap: 2rem;
+            align-items: flex-start;
+            justify-content: center;
+            flex-wrap: wrap;
+            max-width: 520px;
+        }
+        .how-to-play {
+            background: rgba(20, 40, 20, 0.9);
+            border: 1px solid #22c55e;
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            text-align: left;
+            color: #aaa;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            min-width: 220px;
+        }
+        .how-to-play strong {
+            color: #22c55e;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+        .play-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+        .ball-selector {
+            margin: 1rem 0;
+        }
+        .ball-selector-label {
+            color: #aaa;
+            font-size: 0.85rem;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+        .ball-options {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .ball-opt {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 2px solid #444;
+            overflow: hidden;
+            cursor: pointer;
+            padding: 0;
+            background: #222;
+            transition: all 0.2s;
+        }
+        .ball-opt:hover, .ball-opt.selected {
+            border-color: #22c55e;
+            box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+        }
+        .ball-opt img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer">
+            <a href="../../index.html" class="home-btn">Home</a>
+            <div id="hud">Level 1 &nbsp; Goals: 0 &nbsp; Best: 0</div>
+            <div id="start-menu" class="menu active">
+                <h1>Soccer Scorers</h1>
+                <p style="color:#aaa;margin-bottom:1rem;">Dribble past the mannequins and score past the goalie!</p>
+                <div class="ball-selector">
+                    <span class="ball-selector-label">Choose your ball:</span>
+                    <div class="ball-options" id="ball-options">
+                        <button class="ball-opt" data-ball="callan" title="Callan"><img src="../../images/callan.PNG" alt="Callan"></button>
+                        <button class="ball-opt" data-ball="carter" title="Carter"><img src="../../images/carter.PNG" alt="Carter"></button>
+                        <button class="ball-opt" data-ball="chinmay" title="Chinmay"><img src="../../images/chinmay.PNG" alt="Chinmay"></button>
+                        <button class="ball-opt" data-ball="cole" title="Cole"><img src="../../images/cole.PNG" alt="Cole"></button>
+                        <button class="ball-opt" data-ball="enric" title="Enric"><img src="../../images/enric.PNG" alt="Enric"></button>
+                        <button class="ball-opt" data-ball="vivaan" title="Vivaan"><img src="../../images/vivaan.PNG" alt="Vivaan"></button>
+                        <button class="ball-opt" data-ball="weston" title="Weston"><img src="../../images/weston_profilke.png" alt="Weston"></button>
+                    </div>
+                </div>
+                <div class="start-menu-content">
+                    <div class="play-section">
+                        <button onclick="game.start()">Play</button>
+                    </div>
+                    <div class="how-to-play">
+                        <strong>How to Play</strong>
+                        • ARROWS or WASD — Dribble the ball<br>
+                        • SPACE — Hold to aim, move mouse to aim<br>
+                        • SPACE again — Shoot!<br>
+                        • Avoid mannequins and beat the goalie!
+                    </div>
+                </div>
+            </div>
+            <div id="score-menu" class="menu">
+                <h1>GOAL!</h1>
+                <p id="score-msg" style="color:#22c55e;margin-bottom:1rem;">Goals: 0</p>
+                <button onclick="game.nextRound()">Next Shot</button>
+            </div>
+            <div id="instructions">ARROWS/WASD to dribble &nbsp;|&nbsp; SPACE to aim, move mouse, SPACE again to shoot!</div>
+        </div>
+    </div>
+
+    <script>
+        const W = 1280, H = 720;
+        const BALL_R = 18;
+        const MOVE_SPEED = 420;
+        const SHOOT_POWER = 1400;
+        const GOAL_TOP = 40;
+        const GOAL_WIDTH = 280;
+        const GOAL_HEIGHT = 80;
+        const GOAL_LEFT = (W - GOAL_WIDTH) / 2;
+        const GOAL_RIGHT = GOAL_LEFT + GOAL_WIDTH;
+        const POST_WIDTH = 10;
+        const CROSSBAR_HEIGHT = 8;
+        const GOALIE_W = 36, GOALIE_H = 70;
+        const MANNEQUIN_W = 32, MANNEQUIN_H = 56;
+        const DEFENDER_SPEED = 70;
+        const MAX_LEVEL = 100;
+        const STORAGE_KEY = 'soccerScorersBest';
+        const BALL_IMAGES = {
+            callan: '../../images/callan.PNG',
+            carter: '../../images/carter.PNG',
+            chinmay: '../../images/chinmay.PNG',
+            cole: '../../images/cole.PNG',
+            enric: '../../images/enric.PNG',
+            vivaan: '../../images/vivaan.PNG',
+            weston: '../../images/weston_profilke.png'
+        };
+
+        function getBest() {
+            const v = localStorage.getItem(STORAGE_KEY);
+            return v === null ? 0 : parseInt(v, 10);
+        }
+        function setBest(n) { localStorage.setItem(STORAGE_KEY, String(n)); }
+
+        function dist(x1, y1, x2, y2) {
+            return Math.hypot(x2 - x1, y2 - y1);
+        }
+        function circleRectCollision(cx, cy, cr, rx, ry, rw, rh) {
+            const nearestX = Math.max(rx, Math.min(cx, rx + rw));
+            const nearestY = Math.max(ry, Math.min(cy, ry + rh));
+            return dist(cx, cy, nearestX, nearestY) <= cr;
+        }
+
+        function drawMannequin(ctx, x, y, w, h, isGoalie = false) {
+            const headR = w * 0.4;
+            const torsoH = h * 0.55;
+            const headY = y;
+            const torsoY = y + headR * 2;
+            ctx.save();
+            if (isGoalie) {
+                ctx.fillStyle = '#4a90a4';
+                ctx.strokeStyle = '#2d5a67';
+            } else {
+                ctx.fillStyle = '#c4b8a8';
+                ctx.strokeStyle = '#8a7f72';
+            }
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(x + w / 2, headY + headR, headR, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillRect(x + 2, torsoY, w - 4, torsoH);
+            ctx.strokeRect(x + 2, torsoY, w - 4, torsoH);
+            if (isGoalie) {
+                ctx.fillStyle = '#f5deb3';
+                ctx.fillRect(x, torsoY + torsoH - 4, w, 6);
+            }
+            ctx.restore();
+        }
+
+        function createMannequins(level) {
+            const count = 5 + Math.min(Math.floor(level * 0.2), 20);
+            const positions = [];
+            const padding = 80;
+            const safeZoneTop = Math.max(80, 220 - (level / MAX_LEVEL) * 130);
+            const safeZoneLeft = padding;
+            const safeZoneRight = W - padding - MANNEQUIN_W;
+            const safeZoneBottom = H - padding - MANNEQUIN_H;
+            for (let i = 0; i < count; i++) {
+                let x, y;
+                let attempts = 0;
+                do {
+                    x = safeZoneLeft + Math.random() * (safeZoneRight - safeZoneLeft);
+                    y = safeZoneTop + Math.random() * (safeZoneBottom - safeZoneTop);
+                    const gap = Math.max(8, 24 - Math.floor((level / MAX_LEVEL) * 18));
+                    const overlap = positions.some(p =>
+                        Math.abs(p.x - x) < MANNEQUIN_W + gap && Math.abs(p.y - y) < MANNEQUIN_H + gap
+                    );
+                    if (!overlap) break;
+                    attempts++;
+                } while (attempts < 50);
+                positions.push({ x, y, vx: 0, vy: 0 });
+            }
+            return positions;
+        }
+
+        class Game {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.canvas.width = W;
+                this.canvas.height = H;
+                this.state = 'idle';
+                this.goals = 0;
+                this.best = getBest();
+                this.level = 1;
+                this.ball = { x: 0, y: 0, vx: 0, vy: 0 };
+                this.mannequins = [];
+                this.goalie = { x: GOAL_LEFT + GOAL_WIDTH / 2 - GOALIE_W / 2, y: GOAL_TOP + 20, dir: 1, speed: 90 + this.level * 15 };
+                this.running = false;
+                this.aiming = false;
+                this.mouseX = 0;
+                this.mouseY = 0;
+                this.hitGoalFrame = false;
+                this.ballImage = null;
+                this.ballImageKey = localStorage.getItem('soccerScorersBall') || 'callan';
+
+                document.addEventListener('keydown', (e) => {
+                    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d',' '].includes(e.key))
+                        e.preventDefault();
+                    if (e.key === ' ' && this.state === 'playing') {
+                        if (this.aiming) {
+                            this.aiming = false;
+                            this.shoot();
+                        } else {
+                            this.aiming = true;
+                            this.mouseX = this.ball.x;
+                            this.mouseY = this.ball.y;
+                        }
+                    }
+                });
+                this.canvas.addEventListener('mousemove', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const scaleX = this.canvas.width / rect.width;
+                    const scaleY = this.canvas.height / rect.height;
+                    this.mouseX = (e.clientX - rect.left) * scaleX;
+                    this.mouseY = (e.clientY - rect.top) * scaleY;
+                });
+
+                this.loadBallImage();
+                document.querySelectorAll('.ball-opt').forEach(btn => {
+                    if (btn.dataset.ball === this.ballImageKey) btn.classList.add('selected');
+                    btn.addEventListener('click', () => {
+                        const key = btn.dataset.ball;
+                        this.ballImageKey = key;
+                        localStorage.setItem('soccerScorersBall', key);
+                        this.loadBallImage();
+                        document.querySelectorAll('.ball-opt').forEach(b => b.classList.remove('selected'));
+                        btn.classList.add('selected');
+                    });
+                });
+            }
+
+            loadBallImage() {
+                const img = new Image();
+                img.onload = () => { this.ballImage = img; };
+                img.src = BALL_IMAGES[this.ballImageKey] || BALL_IMAGES.callan;
+            }
+
+            start() {
+                document.getElementById('start-menu').classList.remove('active');
+                document.getElementById('score-menu').classList.remove('active');
+                this.state = 'playing';
+                this.goals = 0;
+                this.level = 1;
+                this.initRound();
+                this.running = true;
+                this.updateHud();
+                requestAnimationFrame((t) => this.loop(t));
+            }
+
+            initRound() {
+                this.ball.x = W / 2 - BALL_R;
+                this.ball.y = H - 120;
+                this.ball.vx = 0;
+                this.ball.vy = 0;
+                this.hitGoalFrame = false;
+                this.mannequins = createMannequins(this.level);
+                const goalieSpan = GOAL_WIDTH - GOALIE_W - 20;
+                this.goalie.x = GOAL_LEFT + 10 + (goalieSpan / 2);
+                this.goalie.dir = 1;
+                this.goalie.speed = 95 + this.level * 15 + 20 * Math.sqrt(this.level);
+            }
+
+            nextRound() {
+                document.getElementById('score-menu').classList.remove('active');
+                this.goals++;
+                if (this.goals > this.best) { this.best = this.goals; setBest(this.best); }
+                this.level++;
+                this.state = 'playing';
+                this.aiming = false;
+                this.initRound();
+                this.updateHud();
+            }
+
+            shoot() {
+                const b = this.ball;
+                const dx = this.mouseX - b.x;
+                const dy = this.mouseY - b.y;
+                const len = Math.hypot(dx, dy) || 1;
+                b.vx = (dx / len) * SHOOT_POWER;
+                b.vy = (dy / len) * SHOOT_POWER;
+            }
+
+            loop(currentTime) {
+                if (!this.running) return;
+                const dt = Math.min(1/60, 0.02);
+                if (this.state === 'playing') this.update(dt);
+                this.draw();
+                requestAnimationFrame((t) => this.loop(t));
+            }
+
+            update(dt) {
+                const goalieSpan = GOAL_WIDTH - GOALIE_W - 20;
+                this.goalie.x += this.goalie.dir * this.goalie.speed * dt;
+                if (this.goalie.x <= GOAL_LEFT + 10) {
+                    this.goalie.x = GOAL_LEFT + 10;
+                    this.goalie.dir = 1;
+                } else if (this.goalie.x >= GOAL_LEFT + 10 + goalieSpan) {
+                    this.goalie.x = GOAL_LEFT + 10 + goalieSpan;
+                    this.goalie.dir = -1;
+                }
+
+                const b = this.ball;
+                let dx = 0, dy = 0;
+                if (this.keys) {
+                    if (this.keys.ArrowUp || this.keys.w) dy -= 1;
+                    if (this.keys.ArrowDown || this.keys.s) dy += 1;
+                    if (this.keys.ArrowLeft || this.keys.a) dx -= 1;
+                    if (this.keys.ArrowRight || this.keys.d) dx += 1;
+                }
+                if (dx !== 0 || dy !== 0) {
+                    const len = Math.hypot(dx, dy);
+                    b.vx += (dx / len) * MOVE_SPEED * dt * 4;
+                    b.vy += (dy / len) * MOVE_SPEED * dt * 4;
+                }
+                b.vx *= 0.92;
+                b.vy *= 0.92;
+                b.x += b.vx * dt;
+                b.y += b.vy * dt;
+                b.x = Math.max(BALL_R, Math.min(W - BALL_R, b.x));
+                b.y = Math.max(BALL_R, Math.min(H - BALL_R, b.y));
+
+                for (const m of this.mannequins) {
+                    const toBallX = b.x - (m.x + MANNEQUIN_W / 2);
+                    const toBallY = b.y - (m.y + MANNEQUIN_H / 2);
+                    const len = Math.hypot(toBallX, toBallY) || 1;
+                    m.vx = (toBallX / len) * DEFENDER_SPEED * (1 + (this.level / MAX_LEVEL) * 1.5);
+                    m.vy = (toBallY / len) * DEFENDER_SPEED * (1 + (this.level / MAX_LEVEL) * 1.5);
+                    m.x += m.vx * dt;
+                    m.y += m.vy * dt;
+                    m.x = Math.max(60, Math.min(W - 60 - MANNEQUIN_W, m.x));
+                    m.y = Math.max(60, Math.min(H - 60 - MANNEQUIN_H, m.y));
+                }
+
+                for (const m of this.mannequins) {
+                    if (circleRectCollision(b.x, b.y, BALL_R, m.x, m.y, MANNEQUIN_W, MANNEQUIN_H)) {
+                        const nx = (b.x - (m.x + MANNEQUIN_W/2)) / (MANNEQUIN_W/2 + BALL_R);
+                        const ny = (b.y - (m.y + MANNEQUIN_H/2)) / (MANNEQUIN_H/2 + BALL_R);
+                        const len = Math.hypot(nx, ny) || 1;
+                        b.vx = (nx / len) * 200;
+                        b.vy = (ny / len) * 200;
+                        b.x += b.vx * dt * 2;
+                        b.y += b.vy * dt * 2;
+                    }
+                }
+
+                if (circleRectCollision(b.x, b.y, BALL_R, this.goalie.x, this.goalie.y, GOALIE_W, GOALIE_H)) {
+                    const nx = (b.x - (this.goalie.x + GOALIE_W/2)) / (GOALIE_W/2 + BALL_R);
+                    const ny = (b.y - (this.goalie.y + GOALIE_H/2)) / (GOALIE_H/2 + BALL_R);
+                    const len = Math.hypot(nx, ny) || 1;
+                    b.vx = (nx / len) * 280;
+                    b.vy = (ny / len) * 280;
+                    b.x += b.vx * dt * 2;
+                    b.y += b.vy * dt * 2;
+                }
+
+                const inGoalX = b.x > GOAL_LEFT && b.x < GOAL_RIGHT;
+                const inGoalY = b.y > GOAL_TOP && b.y < GOAL_TOP + GOAL_HEIGHT;
+                const goalieLeft = this.goalie.x - BALL_R;
+                const goalieRight = this.goalie.x + GOALIE_W + BALL_R;
+                const pastGoalie = b.x < goalieLeft || b.x > goalieRight;
+                if (inGoalX && inGoalY && pastGoalie && !this.hitGoalFrame) {
+                    this.state = 'scored';
+                    document.getElementById('score-msg').textContent = 'Goals: ' + (this.goals + 1);
+                    document.getElementById('score-menu').classList.add('active');
+                    return;
+                }
+
+                const crossbarTop = GOAL_TOP - 5;
+                const crossbarRect = { x: GOAL_LEFT - POST_WIDTH, y: 0, w: GOAL_WIDTH + 2 * POST_WIDTH, h: crossbarTop };
+                if (b.y - BALL_R < GOAL_TOP && circleRectCollision(b.x, b.y, BALL_R, crossbarRect.x, crossbarRect.y, crossbarRect.w, crossbarRect.h)) {
+                    this.hitGoalFrame = true;
+                    b.vy = Math.abs(b.vy) * 0.6;
+                    b.y = GOAL_TOP + BALL_R + 2;
+                }
+                const postHitWidth = 5;
+                if (b.x < GOAL_LEFT + postHitWidth && b.y < GOAL_TOP + GOAL_HEIGHT && circleRectCollision(b.x, b.y, BALL_R, GOAL_LEFT, 0, postHitWidth, GOAL_TOP + GOAL_HEIGHT + 20)) {
+                    this.hitGoalFrame = true;
+                    b.vx = Math.abs(b.vx) * 0.6;
+                    b.x = GOAL_LEFT + postHitWidth + BALL_R + 2;
+                }
+                if (b.x > GOAL_RIGHT - postHitWidth && b.y < GOAL_TOP + GOAL_HEIGHT && circleRectCollision(b.x, b.y, BALL_R, GOAL_RIGHT - postHitWidth, 0, postHitWidth, GOAL_TOP + GOAL_HEIGHT + 20)) {
+                    this.hitGoalFrame = true;
+                    b.vx = -Math.abs(b.vx) * 0.6;
+                    b.x = GOAL_RIGHT - postHitWidth - BALL_R - 2;
+                }
+            }
+
+            updateHud() {
+                document.getElementById('hud').innerHTML = 'Level ' + this.level + ' &nbsp; Goals: ' + this.goals + ' &nbsp; Best: ' + this.best;
+            }
+
+            draw() {
+                const ctx = this.ctx;
+                const g = ctx.createLinearGradient(0, 0, 0, H);
+                g.addColorStop(0, '#1a4720');
+                g.addColorStop(0.5, '#2d5a32');
+                g.addColorStop(1, '#1e3d22');
+                ctx.fillStyle = g;
+                ctx.fillRect(0, 0, W, H);
+
+                ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(60, 60, W - 120, H - 120);
+                ctx.beginPath();
+                ctx.moveTo(W/2, 60);
+                ctx.lineTo(W/2, H - 60);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(W/2, H/2, 80, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.fillRect(GOAL_LEFT - 4, 0, GOAL_WIDTH + 8, GOAL_TOP + GOAL_HEIGHT + 4);
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 4;
+                ctx.strokeRect(GOAL_LEFT, GOAL_TOP, GOAL_WIDTH, GOAL_HEIGHT);
+                ctx.fillStyle = 'rgba(255,255,255,0.15)';
+                for (let i = 0; i < 6; i++) {
+                    ctx.fillRect(GOAL_LEFT + 2 + i * 48, GOAL_TOP + 4, 44, 8);
+                }
+
+                for (const m of this.mannequins) {
+                    drawMannequin(ctx, m.x, m.y, MANNEQUIN_W, MANNEQUIN_H, false);
+                }
+                drawMannequin(ctx, this.goalie.x, this.goalie.y, GOALIE_W, GOALIE_H, true);
+
+                if (this.aiming) {
+                    ctx.strokeStyle = '#22c55e';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([8, 6]);
+                    ctx.beginPath();
+                    ctx.moveTo(this.ball.x, this.ball.y);
+                    ctx.lineTo(this.mouseX, this.mouseY);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.beginPath();
+                    ctx.arc(this.mouseX, this.mouseY, 8, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#fff';
+                    ctx.stroke();
+                    ctx.fillStyle = 'rgba(34, 197, 94, 0.5)';
+                    ctx.fill();
+                }
+
+                const bx = this.ball.x, by = this.ball.y;
+                if (this.ballImage && this.ballImage.complete && this.ballImage.naturalWidth) {
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(bx, by, BALL_R, 0, Math.PI * 2);
+                    ctx.closePath();
+                    ctx.clip();
+                    ctx.drawImage(this.ballImage, 0, 0, this.ballImage.naturalWidth, this.ballImage.naturalHeight, bx - BALL_R, by - BALL_R, BALL_R * 2, BALL_R * 2);
+                    ctx.restore();
+                } else {
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.arc(bx, by, BALL_R, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(bx, by, BALL_R, 0, Math.PI * 2);
+                ctx.stroke();
+
+                this.updateHud();
+            }
+        }
+
+        const game = new Game();
+        game.keys = {};
+        document.addEventListener('keydown', (e) => {
+            game.keys[e.key] = true;
+        });
+        document.addEventListener('keyup', (e) => {
+            game.keys[e.key] = false;
+        });
+
+        game.canvas.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+        window.game = game;
+    </script>
+</body>
+</html>
