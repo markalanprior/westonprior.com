@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pillar Rush 2.0</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0a0a0a;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            touch-action: none;
+        }
+        #game-container {
+            position: relative;
+            width: 1280px;
+            height: 720px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        #ui-layer .menu {
+            pointer-events: auto;
+        }
+        .menu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 2rem;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            border: 2px solid #00f2ff;
+            box-shadow: 0 0 15px rgba(0, 242, 255, 0.3);
+        }
+        .menu.active {
+            display: block;
+        }
+        h1 {
+            color: #00f2ff;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin-bottom: 2rem;
+        }
+        button {
+            background: #111;
+            color: #00f2ff;
+            border: 1px solid #00f2ff;
+            padding: 15px 30px;
+            margin: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        button:hover {
+            background: #00f2ff;
+            color: #000;
+            box-shadow: 0 0 10px #00f2ff;
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 1.25rem;
+            pointer-events: none;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            color: #00f2ff;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: #666;
+            font-size: 1rem;
+            letter-spacing: 1px;
+        }
+        .home-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: #111;
+            color: #00f2ff;
+            border: 1px solid #00f2ff;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            pointer-events: auto;
+            transition: all 0.2s;
+        }
+        .home-btn:hover {
+            background: #00f2ff;
+            color: #000;
+            box-shadow: 0 0 10px #00f2ff;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer">
+            <a href="../../index.html" class="home-btn">Home</a>
+            <div id="hud">Score: 0 &nbsp; Level: 1 &nbsp; Best: 0</div>
+            <div id="start-menu" class="menu active">
+                <h1>Pillar Rush 2.0</h1>
+                <button onclick="game.start()">Play</button>
+            </div>
+            <div id="gameover-menu" class="menu">
+                <h1>Game Over</h1>
+                <p id="gameover-score" style="color: #00f2ff; margin-bottom: 1rem;">Score: 0</p>
+                <button onclick="game.restart()">Play Again</button>
+            </div>
+            <div id="instructions">SPACE or TAP to flap up — stay above the lava!</div>
+        </div>
+    </div>
+
+    <script>
+        const STORAGE_KEY = 'pillarRush2Best';
+        const LAVA_RISE_RATE = 14;
+        const PILLARS_PER_LEVEL = 5;
+        const PLAYER_X = 150;
+        const PLAYER_W = 40;
+        const PLAYER_H = 40;
+        const GAP_BASE = 220;
+        const GAP_MIN = 120;
+        const SPACING_BASE = 420;
+        const SPACING_MIN = 280;
+        const SCROLL_BASE = 380;
+        const SCROLL_MAX = 520;
+        const PILLAR_WIDTH = 70;
+        const FIRST_PILLAR_OFFSET = 400;
+
+        function getBest() {
+            const v = localStorage.getItem(STORAGE_KEY);
+            return v === null ? 0 : parseInt(v, 10);
+        }
+        function setBest(n) {
+            localStorage.setItem(STORAGE_KEY, String(n));
+        }
+
+        function checkRectCollision(r1, r2) {
+            return r1.x < r2.x + r2.w &&
+                   r1.x + r1.w > r2.x &&
+                   r1.y < r2.y + r2.h &&
+                   r1.y + r1.h > r2.y;
+        }
+
+        class Renderer {
+            constructor(canvasId) {
+                this.canvas = document.getElementById(canvasId);
+                this.ctx = this.canvas.getContext('2d');
+                this.width = 1280;
+                this.height = 720;
+                this.canvas.width = this.width;
+                this.canvas.height = this.height;
+                this.playerImg = new Image();
+                this.playerImg.src = '../../images/weston_profilke.png';
+            }
+            clear() {
+                this.ctx.fillStyle = '#050505';
+                this.ctx.fillRect(0, 0, this.width, this.height);
+                this.ctx.strokeStyle = '#111';
+                this.ctx.lineWidth = 1;
+                for (let x = 0; x < this.width; x += 80) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(x, 0);
+                    this.ctx.lineTo(x, this.height);
+                    this.ctx.stroke();
+                }
+                for (let y = 0; y < this.height; y += 80) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, y);
+                    this.ctx.lineTo(this.width, y);
+                    this.ctx.stroke();
+                }
+            }
+            drawLava(lavaY) {
+                if (lavaY >= this.height) return;
+                const g = this.ctx.createLinearGradient(0, lavaY, 0, this.height);
+                g.addColorStop(0, '#ff4500');
+                g.addColorStop(0.5, '#cc3300');
+                g.addColorStop(1, '#8b0000');
+                this.ctx.fillStyle = g;
+                this.ctx.shadowBlur = 20;
+                this.ctx.shadowColor = '#ff4500';
+                this.ctx.fillRect(0, lavaY, this.width, this.height - lavaY);
+                this.ctx.shadowBlur = 0;
+            }
+            drawPillar(screenX, topH, gapY, gapHeight, w) {
+                const color = '#00f2ff';
+                this.ctx.fillStyle = color;
+                this.ctx.shadowBlur = 12;
+                this.ctx.shadowColor = color;
+                this.ctx.fillRect(screenX, 0, w, topH);
+                this.ctx.fillRect(screenX, gapY + gapHeight, w, this.height - (gapY + gapHeight));
+                this.ctx.shadowBlur = 0;
+            }
+            drawPlayer(x, y, w, h, time) {
+                this.ctx.shadowBlur = 18;
+                const hue = (time * 80) % 360;
+                this.ctx.shadowColor = `hsl(${hue}, 100%, 50%)`;
+                if (this.playerImg.complete) {
+                    this.ctx.drawImage(this.playerImg, x, y, w, h);
+                } else {
+                    this.ctx.fillStyle = '#00f2ff';
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(x, y + h / 2);
+                    this.ctx.lineTo(x + w, y + h / 2 - 12);
+                    this.ctx.lineTo(x + w, y + h / 2 + 12);
+                    this.ctx.closePath();
+                    this.ctx.fill();
+                }
+                this.ctx.shadowBlur = 0;
+            }
+        }
+
+        class Game {
+            constructor() {
+                this.renderer = new Renderer('gameCanvas');
+                this.state = 'idle';
+                this.score = 0;
+                this.level = 1;
+                this.best = getBest();
+                this.pillars = [];
+                this.nextSpawnX = 0;
+                this.worldOffset = 0;
+                this.lavaY = this.renderer.height;
+                this.playerY = 360 - PLAYER_H / 2;
+                this.playerVy = 0;
+                this.gravity = 1400;
+                this.flapImpulse = -420;
+                this.lastTime = 0;
+                this.running = false;
+
+                window.addEventListener('keydown', (e) => {
+                    if (e.key === ' ') {
+                        e.preventDefault();
+                        this.flap();
+                    }
+                });
+                window.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    this.flap();
+                });
+            }
+
+            flap() {
+                if (this.state === 'playing') {
+                    this.playerVy = this.flapImpulse;
+                }
+                if (this.state === 'gameover') {
+                    this.restart();
+                }
+            }
+
+            getScrollSpeed() {
+                const t = Math.min(1, (this.level - 1) / 20);
+                return SCROLL_BASE + t * (SCROLL_MAX - SCROLL_BASE);
+            }
+            getGapHeight() {
+                const t = Math.min(1, (this.level - 1) / 15);
+                return Math.max(GAP_MIN, GAP_BASE - t * (GAP_BASE - GAP_MIN));
+            }
+            getSpacing() {
+                const t = Math.min(1, (this.level - 1) / 12);
+                return Math.max(SPACING_MIN, SPACING_BASE - t * (SPACING_BASE - SPACING_MIN));
+            }
+
+            spawnPillar() {
+                const gapHeight = this.getGapHeight();
+                const gapY = 80 + Math.random() * (720 - 160 - gapHeight);
+                this.pillars.push({
+                    x: this.nextSpawnX,
+                    gapY,
+                    gapHeight,
+                    w: PILLAR_WIDTH,
+                    scored: false
+                });
+                this.nextSpawnX += this.getSpacing();
+            }
+
+            start() {
+                document.getElementById('start-menu').classList.remove('active');
+                document.getElementById('gameover-menu').classList.remove('active');
+                this.state = 'playing';
+                this.score = 0;
+                this.level = 1;
+                this.pillars = [];
+                this.worldOffset = 0;
+                this.lavaY = this.renderer.height;
+                this.nextSpawnX = PLAYER_X + FIRST_PILLAR_OFFSET;
+                this.playerY = 360 - PLAYER_H / 2;
+                this.playerVy = 0;
+                this.lastTime = performance.now();
+                this.running = true;
+                this.updateHud();
+                requestAnimationFrame((t) => this.loop(t));
+            }
+
+            restart() {
+                this.start();
+            }
+
+            loop(currentTime) {
+                if (!this.running) return;
+                const dt = Math.min((currentTime - this.lastTime) / 1000, 0.1);
+                this.lastTime = currentTime;
+                if (this.state === 'playing') {
+                    this.update(dt);
+                }
+                this.draw();
+                requestAnimationFrame((t) => this.loop(t));
+            }
+
+            update(dt) {
+                const scroll = this.getScrollSpeed() * dt;
+                this.worldOffset += scroll;
+
+                this.playerVy += this.gravity * dt;
+                this.playerY += this.playerVy * dt;
+
+                if (this.playerY < 0) {
+                    this.playerY = 0;
+                    this.playerVy = 0;
+                }
+                if (this.playerY + PLAYER_H > this.renderer.height) {
+                    this.die();
+                    return;
+                }
+
+                this.lavaY -= LAVA_RISE_RATE * dt;
+                if (this.lavaY < 0) this.lavaY = 0;
+                if (this.playerY + PLAYER_H >= this.lavaY) {
+                    this.die();
+                    return;
+                }
+
+                const playerWorldX = this.worldOffset + PLAYER_X;
+                const playerRect = { x: playerWorldX, y: this.playerY, w: PLAYER_W, h: PLAYER_H };
+
+                while (this.pillars.length > 0 && this.pillars[0].x + this.pillars[0].w < this.worldOffset - 50) {
+                    this.pillars.shift();
+                }
+
+                while (this.nextSpawnX - this.worldOffset < this.renderer.width + 200) {
+                    this.spawnPillar();
+                }
+
+                for (const p of this.pillars) {
+                    const screenX = p.x - this.worldOffset;
+                    if (screenX + p.w < 0) continue;
+
+                    if (!p.scored && p.x + p.w < playerWorldX) {
+                        p.scored = true;
+                        this.score++;
+                        if (this.score % PILLARS_PER_LEVEL === 0) {
+                            this.level++;
+                        }
+                    }
+
+                    const topRect = { x: p.x, y: 0, w: p.w, h: p.gapY };
+                    const botRect = { x: p.x, y: p.gapY + p.gapHeight, w: p.w, h: 720 - (p.gapY + p.gapHeight) };
+                    if (checkRectCollision(playerRect, topRect) || checkRectCollision(playerRect, botRect)) {
+                        this.die();
+                        return;
+                    }
+                }
+
+                if (this.score > this.best) {
+                    this.best = this.score;
+                    setBest(this.best);
+                }
+            }
+
+            die() {
+                this.state = 'gameover';
+                document.getElementById('gameover-score').textContent = 'Score: ' + this.score;
+                document.getElementById('gameover-menu').classList.add('active');
+                this.updateHud();
+            }
+
+            updateHud() {
+                document.getElementById('hud').innerHTML =
+                    'Score: ' + this.score + ' &nbsp; Level: ' + this.level + ' &nbsp; Best: ' + this.best;
+            }
+
+            draw() {
+                this.renderer.clear();
+                this.renderer.drawLava(this.lavaY);
+
+                for (const p of this.pillars) {
+                    const screenX = p.x - this.worldOffset;
+                    if (screenX + p.w >= 0 && screenX <= this.renderer.width) {
+                        this.renderer.drawPillar(screenX, p.gapY, p.gapY, p.gapHeight, p.w);
+                    }
+                }
+
+                this.renderer.drawPlayer(PLAYER_X, this.playerY, PLAYER_W, PLAYER_H, this.lastTime / 1000);
+
+                if (this.state === 'gameover') {
+                    this.renderer.ctx.fillStyle = 'rgba(255, 0, 0, 0.25)';
+                    this.renderer.ctx.fillRect(0, 0, this.renderer.width, this.renderer.height);
+                    this.renderer.ctx.fillStyle = '#fff';
+                    this.renderer.ctx.font = 'bold 36px sans-serif';
+                    this.renderer.ctx.textAlign = 'center';
+                    this.renderer.ctx.fillText('SPACE or TAP to play again', this.renderer.width / 2, 380);
+                }
+
+                this.updateHud();
+            }
+        }
+
+        const game = new Game();
+        window.game = game;
+    </script>
+</body>
+</html>
